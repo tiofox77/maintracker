@@ -1,414 +1,530 @@
-import React, { useState } from "react";
-import { useForm } from "react-hook-form";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import {
-  CalendarIcon,
-  Clock,
-  Wrench,
-  Clipboard,
-  Building,
-  Tag,
-} from "lucide-react";
-
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-
+  DialogFooter,
+  DialogDescription,
+} from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+} from "../ui/select";
+import {
+  useMaintenanceTasks,
+  useEquipment,
+  useCategories,
+  useDepartments,
+} from "../../lib/hooks";
+import {
+  MaintenanceTask,
+  MaintenanceTaskInsert,
+  MaintenanceTaskUpdate,
+  getMaintenanceTaskById,
+} from "../../lib/api/maintenance";
+import { toast } from "../../lib/utils/toast";
 
 interface MaintenanceSchedulingModalProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  onSchedule?: (data: MaintenanceFormData) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  taskId?: string | null;
+  mode?: "create" | "edit" | "complete";
 }
 
-interface MaintenanceFormData {
-  title: string;
-  description: string;
-  category: string;
-  department: string;
-  equipment: string;
-  scheduledDate: Date;
-  estimatedDuration: string;
-  priority: string;
-  assignedTo: string;
-}
-
-const defaultFormValues: MaintenanceFormData = {
-  title: "",
-  description: "",
-  category: "",
-  department: "",
-  equipment: "",
-  scheduledDate: new Date(),
-  estimatedDuration: "",
-  priority: "medium",
-  assignedTo: "",
-};
-
-const MaintenanceSchedulingModal: React.FC<MaintenanceSchedulingModalProps> = ({
-  open = true,
+export const MaintenanceSchedulingModal = ({
+  open,
   onOpenChange,
-  onSchedule,
-}) => {
-  const [date, setDate] = useState<Date>(new Date());
+  taskId = null,
+  mode = "create",
+}: MaintenanceSchedulingModalProps) => {
+  // Form states
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [equipmentId, setEquipmentId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [estimatedDuration, setEstimatedDuration] = useState("");
+  const [actualDuration, setActualDuration] = useState("");
+  const [priority, setPriority] = useState<
+    "low" | "medium" | "high" | "critical"
+  >("medium");
+  const [status, setStatus] = useState<
+    "scheduled" | "in-progress" | "completed" | "cancelled" | "partial"
+  >("scheduled");
+  const [assignedTo, setAssignedTo] = useState("");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const form = useForm<MaintenanceFormData>({
-    defaultValues: defaultFormValues,
-  });
+  // Get data from hooks
+  const { addTask, editTask, completeTask } = useMaintenanceTasks();
+  const { equipment, loading: equipmentLoading } = useEquipment();
+  const { categories, loading: categoriesLoading } = useCategories();
+  const { departments, loading: departmentsLoading } = useDepartments();
 
-  const handleSubmit = (data: MaintenanceFormData) => {
-    console.log("Maintenance scheduled:", data);
-    if (onSchedule) {
-      onSchedule(data);
+  // Fetch task data if editing or completing
+  useEffect(() => {
+    const fetchTaskData = async () => {
+      if (taskId && open) {
+        try {
+          setLoading(true);
+          const task = await getMaintenanceTaskById(taskId);
+
+          if (mode === "complete") {
+            // Only set minimal data for completion
+            setTaskTitle(task.title);
+            setEquipmentId(task.equipment_id);
+            setNotes("");
+            setActualDuration("");
+          } else {
+            // Set all data for editing
+            setTaskTitle(task.title);
+            setTaskDescription(task.description || "");
+            setEquipmentId(task.equipment_id);
+            setCategoryId(task.category_id || "");
+
+            // Get department ID from equipment
+            const equipmentItem = equipment.find(
+              (e) => e.id === task.equipment_id,
+            );
+            if (equipmentItem) {
+              setDepartmentId(equipmentItem.department_id);
+            }
+
+            setScheduledDate(task.scheduled_date || "");
+            setEstimatedDuration(
+              task.estimated_duration ? task.estimated_duration.toString() : "",
+            );
+            setPriority(task.priority || "medium");
+            setStatus(task.status || "scheduled");
+            setAssignedTo(task.assigned_to || "");
+            setNotes(task.notes || "");
+          }
+        } catch (error) {
+          console.error("Error fetching task:", error);
+          toast.error("Failed to load task details");
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchTaskData();
+  }, [taskId, open, mode, equipment]);
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!open) {
+      resetForm();
     }
-    if (onOpenChange) {
+  }, [open]);
+
+  const resetForm = () => {
+    setTaskTitle("");
+    setTaskDescription("");
+    setEquipmentId("");
+    setCategoryId("");
+    setDepartmentId("");
+    setScheduledDate("");
+    setEstimatedDuration("");
+    setActualDuration("");
+    setPriority("medium");
+    setStatus("scheduled");
+    setAssignedTo("");
+    setNotes("");
+  };
+
+  const validateForm = () => {
+    if (mode === "complete") {
+      if (!actualDuration) {
+        toast.error("Actual duration is required");
+        return false;
+      }
+      return true;
+    }
+
+    if (!taskTitle) {
+      toast.error("Task title is required");
+      return false;
+    }
+    if (!equipmentId) {
+      toast.error("Equipment is required");
+      return false;
+    }
+    if (!scheduledDate) {
+      toast.error("Scheduled date is required");
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    try {
+      setLoading(true);
+
+      if (mode === "complete" && taskId) {
+        // Complete task
+        await completeTask(taskId, parseFloat(actualDuration), notes);
+        toast.success("Task completed successfully");
+      } else if (taskId) {
+        // Update existing task
+        const taskUpdate: MaintenanceTaskUpdate = {
+          title: taskTitle,
+          description: taskDescription,
+          equipment_id: equipmentId,
+          category_id: categoryId,
+          scheduled_date: scheduledDate,
+          estimated_duration: estimatedDuration
+            ? parseFloat(estimatedDuration)
+            : undefined,
+          priority: priority,
+          status: status,
+          assigned_to: assignedTo || null,
+          notes: notes,
+        };
+        await editTask(taskId, taskUpdate);
+        toast.success("Task updated successfully");
+      } else {
+        // Create new task
+        const newTask: MaintenanceTaskInsert = {
+          title: taskTitle,
+          description: taskDescription,
+          equipment_id: equipmentId,
+          category_id: categoryId,
+          scheduled_date: scheduledDate,
+          estimated_duration: estimatedDuration
+            ? parseFloat(estimatedDuration)
+            : undefined,
+          priority: priority,
+          status: status,
+          assigned_to: assignedTo || null,
+          notes: notes,
+        };
+        await addTask(newTask);
+        toast.success("Task scheduled successfully");
+      }
+
       onOpenChange(false);
+    } catch (error) {
+      console.error("Error saving task:", error);
+      toast.error("Failed to save task");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Mock data for dropdowns
-  const categories = [
-    { value: "preventive", label: "Preventive Maintenance" },
-    { value: "corrective", label: "Corrective Maintenance" },
-    { value: "predictive", label: "Predictive Maintenance" },
-    { value: "condition-based", label: "Condition-based Maintenance" },
-  ];
-
-  const departments = [
-    { value: "production", label: "Production" },
-    { value: "packaging", label: "Packaging" },
-    { value: "warehouse", label: "Warehouse" },
-    { value: "quality", label: "Quality Control" },
-  ];
-
-  const equipment = [
-    { value: "machine-a", label: "Machine A - Production Line 1" },
-    { value: "machine-b", label: "Machine B - Production Line 2" },
-    { value: "forklift-1", label: "Forklift 1 - Warehouse" },
-    { value: "packaging-unit", label: "Packaging Unit 3" },
-  ];
-
-  const priorities = [
-    { value: "low", label: "Low" },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
-    { value: "critical", label: "Critical" },
-  ];
-
-  const technicians = [
-    { value: "john-doe", label: "John Doe" },
-    { value: "jane-smith", label: "Jane Smith" },
-    { value: "robert-johnson", label: "Robert Johnson" },
-    { value: "emily-brown", label: "Emily Brown" },
-  ];
+  // Handle equipment selection to auto-select its category and department
+  const handleEquipmentChange = (value: string) => {
+    setEquipmentId(value);
+    const selectedEquipment = equipment.find((e) => e.id === value);
+    if (selectedEquipment) {
+      setCategoryId(selectedEquipment.category_id);
+      setDepartmentId(selectedEquipment.department_id);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white sm:max-w-[600px]">
+      <DialogContent
+        className={
+          mode === "complete" ? "sm:max-w-[500px]" : "sm:max-w-[800px]"
+        }
+      >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Wrench className="h-5 w-5" />
-            Schedule Maintenance Task
+          <DialogTitle>
+            {mode === "complete"
+              ? "Complete Maintenance Task"
+              : mode === "edit"
+                ? "Edit Maintenance Task"
+                : "Schedule New Maintenance Task"}
           </DialogTitle>
           <DialogDescription>
-            Fill out the form below to schedule a new maintenance task.
+            {mode === "complete"
+              ? "Enter the actual duration and any completion notes."
+              : mode === "edit"
+                ? "Update the maintenance task details below."
+                : "Fill in the details to schedule a new maintenance task."}
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-6"
-          >
-            <div className="grid grid-cols-1 gap-4 py-4">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Task Title</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter maintenance task title"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter task description" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Tag className="h-4 w-4" />
-                        Category
-                      </FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem
-                              key={category.value}
-                              value={category.value}
-                            >
-                              {category.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="department"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        Department
-                      </FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select department" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {departments.map((department) => (
-                            <SelectItem
-                              key={department.value}
-                              value={department.value}
-                            >
-                              {department.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="equipment"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <Wrench className="h-4 w-4" />
-                      Equipment
-                    </FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select equipment" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {equipment.map((item) => (
-                          <SelectItem key={item.value} value={item.value}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="scheduledDate"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel className="flex items-center gap-2">
-                        <CalendarIcon className="h-4 w-4" />
-                        Scheduled Date
-                      </FormLabel>
-                      <div className="p-2 border rounded-md">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => date && field.onChange(date)}
-                          className="rounded-md border"
-                        />
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="estimatedDuration"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          Estimated Duration (hours)
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="0.5"
-                            step="0.5"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+        {loading ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            {mode === "complete" ? (
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="task-title">Task</Label>
+                  <Input id="task-title" value={taskTitle} readOnly disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="actual-duration">
+                    Actual Duration (hours) *
+                  </Label>
+                  <Input
+                    id="actual-duration"
+                    type="number"
+                    min="0.5"
+                    step="0.5"
+                    placeholder="Enter actual hours spent"
+                    value={actualDuration}
+                    onChange={(e) => setActualDuration(e.target.value)}
+                    required
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="priority"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Priority</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select priority" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {priorities.map((priority) => (
-                              <SelectItem
-                                key={priority.value}
-                                value={priority.value}
-                              >
-                                {priority.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="completion-notes">Completion Notes</Label>
+                  <textarea
+                    id="completion-notes"
+                    rows={3}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="Enter any notes about the completed work"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
               </div>
-
-              <FormField
-                control={form.control}
-                name="assignedTo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <Clipboard className="h-4 w-4" />
-                      Assign To
-                    </FormLabel>
+            ) : (
+              <div className="grid gap-6 py-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="task-title">Task Title *</Label>
+                    <Input
+                      id="task-title"
+                      placeholder="Enter task title"
+                      value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="equipment">Equipment *</Label>
                     <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
+                      value={equipmentId}
+                      onValueChange={handleEquipmentChange}
+                      required
                     >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Assign to technician" />
-                        </SelectTrigger>
-                      </FormControl>
+                      <SelectTrigger id="equipment">
+                        <SelectValue placeholder="Select equipment" />
+                      </SelectTrigger>
                       <SelectContent>
-                        {technicians.map((technician) => (
-                          <SelectItem
-                            key={technician.value}
-                            value={technician.value}
-                          >
-                            {technician.label}
+                        {equipmentLoading ? (
+                          <SelectItem value="loading" disabled>
+                            Loading equipment...
                           </SelectItem>
-                        ))}
+                        ) : equipment.length > 0 ? (
+                          equipment.map((equip) => (
+                            <SelectItem key={equip.id} value={equip.id}>
+                              {equip.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-equipment" disabled>
+                            No equipment available
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Select value={categoryId} onValueChange={setCategoryId}>
+                      <SelectTrigger id="category">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoriesLoading ? (
+                          <SelectItem value="loading" disabled>
+                            Loading categories...
+                          </SelectItem>
+                        ) : categories.length > 0 ? (
+                          categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-categories" disabled>
+                            No categories available
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="department">Department</Label>
+                    <Select
+                      value={departmentId}
+                      onValueChange={setDepartmentId}
+                    >
+                      <SelectTrigger id="department">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departmentsLoading ? (
+                          <SelectItem value="loading" disabled>
+                            Loading departments...
+                          </SelectItem>
+                        ) : departments.length > 0 ? (
+                          departments.map((department) => (
+                            <SelectItem
+                              key={department.id}
+                              value={department.id}
+                            >
+                              {department.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-departments" disabled>
+                            No departments available
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="scheduled-date">Scheduled Date *</Label>
+                    <Input
+                      id="scheduled-date"
+                      type="date"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="estimated-duration">
+                      Estimated Duration (hours)
+                    </Label>
+                    <Input
+                      id="estimated-duration"
+                      type="number"
+                      min="0.5"
+                      step="0.5"
+                      placeholder="Enter estimated hours"
+                      value={estimatedDuration}
+                      onChange={(e) => setEstimatedDuration(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select
+                      value={priority}
+                      onValueChange={(
+                        value: "low" | "medium" | "high" | "critical",
+                      ) => setPriority(value)}
+                    >
+                      <SelectTrigger id="priority">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={status}
+                      onValueChange={(
+                        value:
+                          | "scheduled"
+                          | "in-progress"
+                          | "completed"
+                          | "cancelled"
+                          | "partial",
+                      ) => setStatus(value)}
+                    >
+                      <SelectTrigger id="status">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                        <SelectItem value="in-progress">In Progress</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        <SelectItem value="partial">Partial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="assigned-to">Assigned To</Label>
+                    <Input
+                      id="assigned-to"
+                      placeholder="Enter technician ID"
+                      value={assignedTo}
+                      onChange={(e) => setAssignedTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <textarea
+                    id="description"
+                    rows={3}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="Enter task description"
+                    value={taskDescription}
+                    onChange={(e) => setTaskDescription(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <textarea
+                    id="notes"
+                    rows={2}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                    placeholder="Enter any additional notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
+                <div className="text-sm text-gray-500">* Required fields</div>
+              </div>
+            )}
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange && onOpenChange(false)}
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
               >
                 Cancel
               </Button>
-              <Button type="submit">Schedule Maintenance</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <>
+                    <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    {mode === "complete" ? "Completing..." : "Saving..."}
+                  </>
+                ) : mode === "complete" ? (
+                  "Complete Task"
+                ) : mode === "edit" ? (
+                  "Update Task"
+                ) : (
+                  "Schedule Task"
+                )}
+              </Button>
             </DialogFooter>
           </form>
-        </Form>
+        )}
       </DialogContent>
     </Dialog>
   );
 };
-
-export default MaintenanceSchedulingModal;

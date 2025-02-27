@@ -1,14 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
+  DialogDescription,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import {
   Select,
   SelectContent,
@@ -16,486 +17,347 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { useEquipment, useCategories, useDepartments } from "../../lib/hooks";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../ui/table";
-import { Badge } from "../ui/badge";
-import { Search, Plus, Filter, Edit, Trash2, Download } from "lucide-react";
-
-interface Equipment {
-  id: string;
-  name: string;
-  category: string;
-  department: string;
-  status: "operational" | "maintenance" | "out-of-service";
-  lastMaintenance: string;
-  nextMaintenance: string;
-}
+  Equipment,
+  EquipmentInsert,
+  EquipmentUpdate,
+  getEquipmentById,
+} from "../../lib/api/equipment";
+import { toast } from "../../lib/utils/toast";
 
 interface EquipmentManagementModalProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  equipmentId?: string | null;
 }
 
-const EquipmentManagementModal = ({
-  open = true,
+export const EquipmentManagementModal = ({
+  open,
   onOpenChange,
+  equipmentId = null,
 }: EquipmentManagementModalProps) => {
-  const [activeTab, setActiveTab] = useState("list");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all-categories");
-  const [selectedDepartment, setSelectedDepartment] =
-    useState("all-departments");
-  const [selectedStatus, setSelectedStatus] = useState("all-statuses");
+  // Form states
+  const [equipmentName, setEquipmentName] = useState("");
+  const [serialNumber, setSerialNumber] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [status, setStatus] = useState<
+    "operational" | "maintenance" | "out-of-service"
+  >("operational");
+  const [purchaseDate, setPurchaseDate] = useState("");
+  const [lastMaintenance, setLastMaintenance] = useState("");
+  const [nextMaintenance, setNextMaintenance] = useState("");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Mock data for equipment list
-  const equipmentList: Equipment[] = [
-    {
-      id: "1",
-      name: "Industrial Mixer",
-      category: "Production",
-      department: "Manufacturing",
-      status: "operational",
-      lastMaintenance: "2023-10-15",
-      nextMaintenance: "2024-01-15",
-    },
-    {
-      id: "2",
-      name: "Conveyor Belt A",
-      category: "Production",
-      department: "Assembly",
-      status: "maintenance",
-      lastMaintenance: "2023-11-05",
-      nextMaintenance: "2023-12-05",
-    },
-    {
-      id: "3",
-      name: "HVAC System",
-      category: "Facility",
-      department: "Building Services",
-      status: "operational",
-      lastMaintenance: "2023-09-20",
-      nextMaintenance: "2024-03-20",
-    },
-    {
-      id: "4",
-      name: "Forklift #2",
-      category: "Transportation",
-      department: "Warehouse",
-      status: "out-of-service",
-      lastMaintenance: "2023-08-10",
-      nextMaintenance: "2023-11-10",
-    },
-  ];
+  // Get data from hooks
+  const { addEquipment, editEquipment } = useEquipment();
+  const { categories, loading: categoriesLoading } = useCategories();
+  const { departments, loading: departmentsLoading } = useDepartments();
 
-  // Mock data for categories and departments
-  const categories = [
-    "Production",
-    "Facility",
-    "Transportation",
-    "IT",
-    "Office",
-  ];
-  const departments = [
-    "Manufacturing",
-    "Assembly",
-    "Building Services",
-    "Warehouse",
-    "Administration",
-  ];
-  const statuses = ["operational", "maintenance", "out-of-service"];
+  // Fetch equipment data if editing
+  useEffect(() => {
+    const fetchEquipmentData = async () => {
+      if (equipmentId && open) {
+        try {
+          setLoading(true);
+          const equipment = await getEquipmentById(equipmentId);
 
-  // Filter equipment based on search and filters
-  const filteredEquipment = equipmentList.filter((equipment) => {
-    const matchesSearch = equipment.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "all-categories" ||
-      equipment.category === selectedCategory;
-    const matchesDepartment =
-      selectedDepartment === "all-departments" ||
-      equipment.department === selectedDepartment;
-    const matchesStatus =
-      selectedStatus === "all-statuses" || equipment.status === selectedStatus;
+          setEquipmentName(equipment.name);
+          setSerialNumber(equipment.serial_number || "");
+          setCategoryId(equipment.category_id);
+          setDepartmentId(equipment.department_id);
+          setStatus(equipment.status);
+          setPurchaseDate(equipment.purchase_date || "");
+          setLastMaintenance(equipment.last_maintenance || "");
+          setNextMaintenance(equipment.next_maintenance || "");
+          setNotes(equipment.notes || "");
+        } catch (error) {
+          console.error("Error fetching equipment:", error);
+          toast.error("Failed to load equipment details");
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
 
-    return (
-      matchesSearch && matchesCategory && matchesDepartment && matchesStatus
-    );
-  });
+    fetchEquipmentData();
+  }, [equipmentId, open]);
 
-  const handleAddNewEquipment = () => {
-    setActiveTab("add");
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!open) {
+      resetForm();
+    }
+  }, [open]);
+
+  const resetForm = () => {
+    setEquipmentName("");
+    setSerialNumber("");
+    setCategoryId("");
+    setDepartmentId("");
+    setStatus("operational");
+    setPurchaseDate("");
+    setLastMaintenance("");
+    setNextMaintenance("");
+    setNotes("");
   };
 
-  const handleEditEquipment = (id: string) => {
-    // In a real application, you would fetch the equipment details and populate the form
-    setActiveTab("add");
+  const validateForm = () => {
+    if (!equipmentName) {
+      toast.error("Equipment name is required");
+      return false;
+    }
+    if (!categoryId) {
+      toast.error("Category is required");
+      return false;
+    }
+    if (!departmentId) {
+      toast.error("Department is required");
+      return false;
+    }
+    return true;
   };
 
-  const handleDeleteEquipment = (id: string) => {
-    // In a real application, you would show a confirmation dialog and delete the equipment
-    console.log(`Delete equipment with ID: ${id}`);
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleExportData = () => {
-    // In a real application, you would generate and download a CSV/Excel file
-    console.log("Exporting equipment data");
-  };
+    if (!validateForm()) return;
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case "operational":
-        return "bg-green-100 text-green-800";
-      case "maintenance":
-        return "bg-yellow-100 text-yellow-800";
-      case "out-of-service":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+    try {
+      setLoading(true);
+
+      if (equipmentId) {
+        // Update existing equipment
+        const equipmentUpdate: EquipmentUpdate = {
+          name: equipmentName,
+          serial_number: serialNumber || null,
+          category_id: categoryId,
+          department_id: departmentId,
+          status: status,
+          purchase_date: purchaseDate || null,
+          last_maintenance: lastMaintenance || null,
+          next_maintenance: nextMaintenance || null,
+          notes: notes || null,
+        };
+        await editEquipment(equipmentId, equipmentUpdate);
+        toast.success("Equipment updated successfully");
+      } else {
+        // Create new equipment
+        const newEquipment: EquipmentInsert = {
+          name: equipmentName,
+          serial_number: serialNumber || null,
+          category_id: categoryId,
+          department_id: departmentId,
+          status: status,
+          purchase_date: purchaseDate || null,
+          last_maintenance: lastMaintenance || null,
+          next_maintenance: nextMaintenance || null,
+          notes: notes || null,
+        };
+        await addEquipment(newEquipment);
+        toast.success("Equipment added successfully");
+      }
+
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error saving equipment:", error);
+      toast.error("Failed to save equipment");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl bg-white p-0 overflow-hidden">
-        <DialogHeader className="p-6 border-b">
-          <DialogTitle className="text-2xl font-bold">
-            Equipment Management
+      <DialogContent className="sm:max-w-[800px]">
+        <DialogHeader>
+          <DialogTitle>
+            {equipmentId ? "Edit Equipment" : "Add New Equipment"}
           </DialogTitle>
           <DialogDescription>
-            View, add, edit, and manage equipment across all departments.
+            {equipmentId
+              ? "Update the equipment details below."
+              : "Fill in the details to add new equipment."}
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="px-6 pt-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="list">Equipment List</TabsTrigger>
-              <TabsTrigger value="add">Add/Edit Equipment</TabsTrigger>
-            </TabsList>
+        {loading && !categories.length ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
-
-          <TabsContent value="list" className="p-6">
-            <div className="flex flex-col space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="relative w-64">
-                  <Search
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    size={18}
-                  />
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="equipment-name">Equipment Name *</Label>
                   <Input
-                    placeholder="Search equipment..."
-                    className="pl-10"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    id="equipment-name"
+                    placeholder="Enter equipment name"
+                    value={equipmentName}
+                    onChange={(e) => setEquipmentName(e.target.value)}
+                    required
                   />
                 </div>
-                <div className="flex space-x-2">
-                  <Button variant="outline" onClick={handleExportData}>
-                    <Download size={16} className="mr-2" />
-                    Export
-                  </Button>
-                  <Button onClick={handleAddNewEquipment}>
-                    <Plus size={16} className="mr-2" />
-                    Add Equipment
-                  </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="serial-number">Serial Number</Label>
+                  <Input
+                    id="serial-number"
+                    placeholder="Enter serial number"
+                    value={serialNumber}
+                    onChange={(e) => setSerialNumber(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="category">Category *</Label>
+                  <Select
+                    value={categoryId}
+                    onValueChange={setCategoryId}
+                    required
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoriesLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading categories...
+                        </SelectItem>
+                      ) : categories.length > 0 ? (
+                        categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-categories" disabled>
+                          No categories available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department *</Label>
+                  <Select
+                    value={departmentId}
+                    onValueChange={setDepartmentId}
+                    required
+                  >
+                    <SelectTrigger id="department">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentsLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading departments...
+                        </SelectItem>
+                      ) : departments.length > 0 ? (
+                        departments.map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-departments" disabled>
+                          No departments available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(
+                      value: "operational" | "maintenance" | "out-of-service",
+                    ) => setStatus(value)}
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="operational">Operational</SelectItem>
+                      <SelectItem value="maintenance">Maintenance</SelectItem>
+                      <SelectItem value="out-of-service">
+                        Out of Service
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="purchase-date">Purchase Date</Label>
+                  <Input
+                    id="purchase-date"
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last-maintenance">
+                    Last Maintenance Date
+                  </Label>
+                  <Input
+                    id="last-maintenance"
+                    type="date"
+                    value={lastMaintenance}
+                    onChange={(e) => setLastMaintenance(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="next-maintenance">
+                    Next Maintenance Date
+                  </Label>
+                  <Input
+                    id="next-maintenance"
+                    type="date"
+                    value={nextMaintenance}
+                    onChange={(e) => setNextMaintenance(e.target.value)}
+                  />
                 </div>
               </div>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Filters</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-4">
-                    <div className="w-48">
-                      <Select
-                        value={selectedCategory}
-                        onValueChange={setSelectedCategory}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all-categories">
-                            All Categories
-                          </SelectItem>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-48">
-                      <Select
-                        value={selectedDepartment}
-                        onValueChange={setSelectedDepartment}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all-departments">
-                            All Departments
-                          </SelectItem>
-                          {departments.map((department) => (
-                            <SelectItem key={department} value={department}>
-                              {department}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-48">
-                      <Select
-                        value={selectedStatus}
-                        onValueChange={setSelectedStatus}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all-statuses">
-                            All Statuses
-                          </SelectItem>
-                          {statuses.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Last Maintenance</TableHead>
-                      <TableHead>Next Maintenance</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEquipment.length > 0 ? (
-                      filteredEquipment.map((equipment) => (
-                        <TableRow key={equipment.id}>
-                          <TableCell className="font-medium">
-                            {equipment.name}
-                          </TableCell>
-                          <TableCell>{equipment.category}</TableCell>
-                          <TableCell>{equipment.department}</TableCell>
-                          <TableCell>
-                            <Badge
-                              className={getStatusBadgeColor(equipment.status)}
-                            >
-                              {equipment.status.charAt(0).toUpperCase() +
-                                equipment.status.slice(1)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{equipment.lastMaintenance}</TableCell>
-                          <TableCell>{equipment.nextMaintenance}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  handleEditEquipment(equipment.id)
-                                }
-                              >
-                                <Edit size={16} />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  handleDeleteEquipment(equipment.id)
-                                }
-                              >
-                                <Trash2 size={16} />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={7}
-                          className="text-center py-6 text-gray-500"
-                        >
-                          No equipment found matching your filters.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <textarea
+                  id="notes"
+                  rows={3}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  placeholder="Enter any additional notes about this equipment"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
               </div>
+              <div className="text-sm text-gray-500">* Required fields</div>
             </div>
-          </TabsContent>
-
-          <TabsContent value="add" className="p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Equipment Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label htmlFor="name" className="text-sm font-medium">
-                        Equipment Name
-                      </label>
-                      <Input id="name" placeholder="Enter equipment name" />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="serial" className="text-sm font-medium">
-                        Serial Number
-                      </label>
-                      <Input id="serial" placeholder="Enter serial number" />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="category" className="text-sm font-medium">
-                        Category
-                      </label>
-                      <Select>
-                        <SelectTrigger id="category">
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="department"
-                        className="text-sm font-medium"
-                      >
-                        Department
-                      </label>
-                      <Select>
-                        <SelectTrigger id="department">
-                          <SelectValue placeholder="Select department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {departments.map((department) => (
-                            <SelectItem key={department} value={department}>
-                              {department}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="purchase-date"
-                        className="text-sm font-medium"
-                      >
-                        Purchase Date
-                      </label>
-                      <Input id="purchase-date" type="date" />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="status" className="text-sm font-medium">
-                        Status
-                      </label>
-                      <Select>
-                        <SelectTrigger id="status">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statuses.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="last-maintenance"
-                        className="text-sm font-medium"
-                      >
-                        Last Maintenance Date
-                      </label>
-                      <Input id="last-maintenance" type="date" />
-                    </div>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="next-maintenance"
-                        className="text-sm font-medium"
-                      >
-                        Next Maintenance Date
-                      </label>
-                      <Input id="next-maintenance" type="date" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label htmlFor="notes" className="text-sm font-medium">
-                      Notes
-                    </label>
-                    <textarea
-                      id="notes"
-                      rows={4}
-                      className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                      placeholder="Enter any additional notes about this equipment"
-                    />
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        <DialogFooter className="p-6 border-t bg-gray-50">
-          {activeTab === "list" ? (
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange && onOpenChange(false)}
-            >
-              Close
-            </Button>
-          ) : (
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={() => setActiveTab("list")}>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
+              >
                 Cancel
               </Button>
-              <div className="space-x-2">
-                <Button variant="outline" onClick={() => setActiveTab("list")}>
-                  Save as Draft
-                </Button>
-                <Button>Save Equipment</Button>
-              </div>
-            </div>
-          )}
-        </DialogFooter>
+              <Button type="submit" disabled={loading}>
+                {loading ? (
+                  <>
+                    <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Saving...
+                  </>
+                ) : equipmentId ? (
+                  "Update Equipment"
+                ) : (
+                  "Add Equipment"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
 };
-
-export default EquipmentManagementModal;

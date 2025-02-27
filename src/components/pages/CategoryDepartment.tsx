@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardHeader from "../dashboard/DashboardHeader";
 import Sidebar from "../layout/Sidebar";
 import { Button } from "../ui/button";
@@ -22,22 +22,28 @@ import {
   DialogFooter,
   DialogDescription,
 } from "../ui/dialog";
-import { Edit, Plus, Search, Trash2 } from "lucide-react";
-
-interface Category {
-  id: string;
-  name: string;
-  description: string;
-  equipmentCount: number;
-}
-
-interface Department {
-  id: string;
-  name: string;
-  description: string;
-  location: string;
-  equipmentCount: number;
-}
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { Edit, Plus, Search, Trash2, Loader2 } from "lucide-react";
+import { useCategories, useDepartments } from "../../lib/hooks";
+import {
+  Category,
+  CategoryInsert,
+  CategoryUpdate,
+} from "../../lib/api/categories";
+import {
+  Department,
+  DepartmentInsert,
+  DepartmentUpdate,
+} from "../../lib/api/departments";
 
 const CategoryDepartment = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -47,92 +53,43 @@ const CategoryDepartment = () => {
 
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{
+    id: string;
+    type: "category" | "department";
+  } | null>(null);
+
+  // Form states
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryDescription, setCategoryDescription] = useState("");
+  const [departmentName, setDepartmentName] = useState("");
+  const [departmentDescription, setDepartmentDescription] = useState("");
+  const [departmentLocation, setDepartmentLocation] = useState("");
+
+  // Get categories and departments from hooks
+  const {
+    categories,
+    loading: categoriesLoading,
+    error: categoriesError,
+    addCategory,
+    editCategory,
+    removeCategory,
+  } = useCategories();
+
+  const {
+    departments,
+    loading: departmentsLoading,
+    error: departmentsError,
+    addDepartment,
+    editDepartment,
+    removeDepartment,
+  } = useDepartments();
 
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(
     null,
   );
   const [selectedDepartment, setSelectedDepartment] =
     useState<Department | null>(null);
-
-  // Mock data for categories
-  const categories: Category[] = [
-    {
-      id: "1",
-      name: "Production",
-      description: "Equipment used in production processes",
-      equipmentCount: 25,
-    },
-    {
-      id: "2",
-      name: "Facility",
-      description: "Building infrastructure and systems",
-      equipmentCount: 18,
-    },
-    {
-      id: "3",
-      name: "Transportation",
-      description: "Vehicles and material handling equipment",
-      equipmentCount: 12,
-    },
-    {
-      id: "4",
-      name: "IT",
-      description: "Computing and networking equipment",
-      equipmentCount: 30,
-    },
-    {
-      id: "5",
-      name: "Office",
-      description: "Office equipment and furniture",
-      equipmentCount: 45,
-    },
-  ];
-
-  // Mock data for departments
-  const departments: Department[] = [
-    {
-      id: "1",
-      name: "Manufacturing",
-      description: "Main production department",
-      location: "Building A, Floor 1",
-      equipmentCount: 35,
-    },
-    {
-      id: "2",
-      name: "Assembly",
-      description: "Final product assembly",
-      location: "Building A, Floor 2",
-      equipmentCount: 22,
-    },
-    {
-      id: "3",
-      name: "Building Services",
-      description: "Facility maintenance and operations",
-      location: "Building B, Floor 1",
-      equipmentCount: 15,
-    },
-    {
-      id: "4",
-      name: "Warehouse",
-      description: "Storage and logistics",
-      location: "Building C",
-      equipmentCount: 18,
-    },
-    {
-      id: "5",
-      name: "IT Services",
-      description: "Information technology support",
-      location: "Building B, Floor 2",
-      equipmentCount: 28,
-    },
-    {
-      id: "6",
-      name: "Administration",
-      description: "Administrative offices",
-      location: "Building D",
-      equipmentCount: 40,
-    },
-  ];
 
   const handleToggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
@@ -142,9 +99,10 @@ const CategoryDepartment = () => {
   const filteredCategories = categories.filter(
     (category) =>
       category.name.toLowerCase().includes(categorySearchQuery.toLowerCase()) ||
-      category.description
-        .toLowerCase()
-        .includes(categorySearchQuery.toLowerCase()),
+      (category.description &&
+        category.description
+          .toLowerCase()
+          .includes(categorySearchQuery.toLowerCase())),
   );
 
   // Filter departments based on search
@@ -153,42 +111,137 @@ const CategoryDepartment = () => {
       department.name
         .toLowerCase()
         .includes(departmentSearchQuery.toLowerCase()) ||
-      department.description
-        .toLowerCase()
-        .includes(departmentSearchQuery.toLowerCase()) ||
-      department.location
-        .toLowerCase()
-        .includes(departmentSearchQuery.toLowerCase()),
+      (department.description &&
+        department.description
+          .toLowerCase()
+          .includes(departmentSearchQuery.toLowerCase())) ||
+      (department.location &&
+        department.location
+          .toLowerCase()
+          .includes(departmentSearchQuery.toLowerCase())),
   );
 
+  // Category CRUD operations
   const handleAddCategory = () => {
     setSelectedCategory(null);
+    setCategoryName("");
+    setCategoryDescription("");
     setCategoryModalOpen(true);
   };
 
   const handleEditCategory = (category: Category) => {
     setSelectedCategory(category);
+    setCategoryName(category.name);
+    setCategoryDescription(category.description || "");
     setCategoryModalOpen(true);
   };
 
   const handleDeleteCategory = (id: string) => {
-    // In a real application, you would show a confirmation dialog and delete the category
-    console.log(`Delete category with ID: ${id}`);
+    setItemToDelete({ id, type: "category" });
+    setDeleteDialogOpen(true);
   };
 
+  const confirmDeleteCategory = async () => {
+    if (itemToDelete && itemToDelete.type === "category") {
+      try {
+        await removeCategory(itemToDelete.id);
+        setDeleteDialogOpen(false);
+        setItemToDelete(null);
+      } catch (error) {
+        console.error("Error deleting category:", error);
+      }
+    }
+  };
+
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      if (selectedCategory) {
+        // Update existing category
+        const categoryUpdate: CategoryUpdate = {
+          name: categoryName,
+          description: categoryDescription,
+        };
+        await editCategory(selectedCategory.id, categoryUpdate);
+      } else {
+        // Create new category
+        const newCategory: CategoryInsert = {
+          name: categoryName,
+          description: categoryDescription,
+        };
+        await addCategory(newCategory);
+      }
+      setCategoryModalOpen(false);
+      setCategoryName("");
+      setCategoryDescription("");
+    } catch (error) {
+      console.error("Error saving category:", error);
+    }
+  };
+
+  // Department CRUD operations
   const handleAddDepartment = () => {
     setSelectedDepartment(null);
+    setDepartmentName("");
+    setDepartmentDescription("");
+    setDepartmentLocation("");
     setDepartmentModalOpen(true);
   };
 
   const handleEditDepartment = (department: Department) => {
     setSelectedDepartment(department);
+    setDepartmentName(department.name);
+    setDepartmentDescription(department.description || "");
+    setDepartmentLocation(department.location || "");
     setDepartmentModalOpen(true);
   };
 
   const handleDeleteDepartment = (id: string) => {
-    // In a real application, you would show a confirmation dialog and delete the department
-    console.log(`Delete department with ID: ${id}`);
+    setItemToDelete({ id, type: "department" });
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteDepartment = async () => {
+    if (itemToDelete && itemToDelete.type === "department") {
+      try {
+        await removeDepartment(itemToDelete.id);
+        setDeleteDialogOpen(false);
+        setItemToDelete(null);
+      } catch (error) {
+        console.error("Error deleting department:", error);
+      }
+    }
+  };
+
+  const handleDepartmentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      if (selectedDepartment) {
+        // Update existing department
+        const departmentUpdate: DepartmentUpdate = {
+          name: departmentName,
+          description: departmentDescription,
+          location: departmentLocation,
+        };
+        await editDepartment(selectedDepartment.id, departmentUpdate);
+      } else {
+        // Create new department
+        const newDepartment: DepartmentInsert = {
+          name: departmentName,
+          description: departmentDescription,
+          location: departmentLocation,
+        };
+        await addDepartment(newDepartment);
+      }
+      setDepartmentModalOpen(false);
+      setDepartmentName("");
+      setDepartmentDescription("");
+      setDepartmentLocation("");
+    } catch (error) {
+      console.error("Error saving department:", error);
+    }
   };
 
   return (
@@ -249,25 +302,40 @@ const CategoryDepartment = () => {
                             <TableRow>
                               <TableHead>Name</TableHead>
                               <TableHead>Description</TableHead>
-                              <TableHead>Equipment Count</TableHead>
                               <TableHead className="text-right">
                                 Actions
                               </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredCategories.length > 0 ? (
+                            {categoriesLoading ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={3}
+                                  className="text-center py-10"
+                                >
+                                  <div className="flex justify-center items-center">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    <span>Loading categories...</span>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : categoriesError ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={3}
+                                  className="text-center py-6 text-red-500"
+                                >
+                                  Error loading categories. Please try again.
+                                </TableCell>
+                              </TableRow>
+                            ) : filteredCategories.length > 0 ? (
                               filteredCategories.map((category) => (
                                 <TableRow key={category.id}>
                                   <TableCell className="font-medium">
                                     {category.name}
                                   </TableCell>
                                   <TableCell>{category.description}</TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline">
-                                      {category.equipmentCount}
-                                    </Badge>
-                                  </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex justify-end space-x-2">
                                       <Button
@@ -295,7 +363,7 @@ const CategoryDepartment = () => {
                             ) : (
                               <TableRow>
                                 <TableCell
-                                  colSpan={4}
+                                  colSpan={3}
                                   className="text-center py-6 text-gray-500"
                                 >
                                   No categories found matching your search.
@@ -343,14 +411,34 @@ const CategoryDepartment = () => {
                               <TableHead>Name</TableHead>
                               <TableHead>Description</TableHead>
                               <TableHead>Location</TableHead>
-                              <TableHead>Equipment Count</TableHead>
                               <TableHead className="text-right">
                                 Actions
                               </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredDepartments.length > 0 ? (
+                            {departmentsLoading ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  className="text-center py-10"
+                                >
+                                  <div className="flex justify-center items-center">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    <span>Loading departments...</span>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : departmentsError ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  className="text-center py-6 text-red-500"
+                                >
+                                  Error loading departments. Please try again.
+                                </TableCell>
+                              </TableRow>
+                            ) : filteredDepartments.length > 0 ? (
                               filteredDepartments.map((department) => (
                                 <TableRow key={department.id}>
                                   <TableCell className="font-medium">
@@ -360,11 +448,6 @@ const CategoryDepartment = () => {
                                     {department.description}
                                   </TableCell>
                                   <TableCell>{department.location}</TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline">
-                                      {department.equipmentCount}
-                                    </Badge>
-                                  </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex justify-end space-x-2">
                                       <Button
@@ -392,7 +475,7 @@ const CategoryDepartment = () => {
                             ) : (
                               <TableRow>
                                 <TableCell
-                                  colSpan={5}
+                                  colSpan={4}
                                   className="text-center py-6 text-gray-500"
                                 >
                                   No departments found matching your search.
@@ -424,44 +507,50 @@ const CategoryDepartment = () => {
                 : "Fill in the details to create a new category."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="category-name" className="text-sm font-medium">
-                Category Name
-              </label>
-              <Input
-                id="category-name"
-                placeholder="Enter category name"
-                defaultValue={selectedCategory?.name || ""}
-              />
+          <form onSubmit={handleCategorySubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="category-name" className="text-sm font-medium">
+                  Category Name
+                </label>
+                <Input
+                  id="category-name"
+                  placeholder="Enter category name"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="category-description"
+                  className="text-sm font-medium"
+                >
+                  Description
+                </label>
+                <textarea
+                  id="category-description"
+                  rows={3}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  placeholder="Enter category description"
+                  value={categoryDescription}
+                  onChange={(e) => setCategoryDescription(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="category-description"
-                className="text-sm font-medium"
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCategoryModalOpen(false)}
               >
-                Description
-              </label>
-              <textarea
-                id="category-description"
-                rows={3}
-                className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                placeholder="Enter category description"
-                defaultValue={selectedCategory?.description || ""}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCategoryModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit">
-              {selectedCategory ? "Update Category" : "Add Category"}
-            </Button>
-          </DialogFooter>
+                Cancel
+              </Button>
+              <Button type="submit">
+                {selectedCategory ? "Update Category" : "Add Category"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -478,59 +567,98 @@ const CategoryDepartment = () => {
                 : "Fill in the details to create a new department."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <label htmlFor="department-name" className="text-sm font-medium">
-                Department Name
-              </label>
-              <Input
-                id="department-name"
-                placeholder="Enter department name"
-                defaultValue={selectedDepartment?.name || ""}
-              />
+          <form onSubmit={handleDepartmentSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="department-name"
+                  className="text-sm font-medium"
+                >
+                  Department Name
+                </label>
+                <Input
+                  id="department-name"
+                  placeholder="Enter department name"
+                  value={departmentName}
+                  onChange={(e) => setDepartmentName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="department-description"
+                  className="text-sm font-medium"
+                >
+                  Description
+                </label>
+                <textarea
+                  id="department-description"
+                  rows={3}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  placeholder="Enter department description"
+                  value={departmentDescription}
+                  onChange={(e) => setDepartmentDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="department-location"
+                  className="text-sm font-medium"
+                >
+                  Location
+                </label>
+                <Input
+                  id="department-location"
+                  placeholder="Enter department location"
+                  value={departmentLocation}
+                  onChange={(e) => setDepartmentLocation(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="department-description"
-                className="text-sm font-medium"
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDepartmentModalOpen(false)}
               >
-                Description
-              </label>
-              <textarea
-                id="department-description"
-                rows={3}
-                className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                placeholder="Enter department description"
-                defaultValue={selectedDepartment?.description || ""}
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="department-location"
-                className="text-sm font-medium"
-              >
-                Location
-              </label>
-              <Input
-                id="department-location"
-                placeholder="Enter department location"
-                defaultValue={selectedDepartment?.location || ""}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDepartmentModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit">
-              {selectedDepartment ? "Update Department" : "Add Department"}
-            </Button>
-          </DialogFooter>
+                Cancel
+              </Button>
+              <Button type="submit">
+                {selectedDepartment ? "Update Department" : "Add Department"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete this {itemToDelete?.type}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the{" "}
+              {itemToDelete?.type}
+              and remove it from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                itemToDelete?.type === "category"
+                  ? confirmDeleteCategory()
+                  : confirmDeleteDepartment()
+              }
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

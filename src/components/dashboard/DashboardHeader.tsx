@@ -1,8 +1,11 @@
-import React from "react";
-import { Search, Bell, Settings, Menu } from "lucide-react";
+import React, { useState } from "react";
+import { Search, Settings, Menu } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import NotificationCenter from "./NotificationCenter";
+import { Link } from "react-router-dom";
+import { useSupabase } from "../context/SupabaseProvider";
 
 interface DashboardHeaderProps {
   title?: string;
@@ -13,6 +16,15 @@ const DashboardHeader = ({
   title = "Maintenance Dashboard",
   onMenuToggle = () => {},
 }: DashboardHeaderProps) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useSupabase();
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    // In a real app, you would implement search functionality here
+    console.log("Searching for:", searchQuery);
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 h-20 w-full px-4 flex items-center justify-between">
       <div className="flex items-center gap-4">
@@ -28,23 +40,24 @@ const DashboardHeader = ({
       </div>
 
       <div className="flex items-center gap-4 flex-1 max-w-md mx-4">
-        <div className="relative w-full">
+        <form onSubmit={handleSearch} className="relative w-full">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder="Search equipment, tasks..."
             className="pl-10 w-full bg-gray-50"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
-        </div>
+        </form>
       </div>
 
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5 text-gray-600" />
-          <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-        </Button>
-        <Button variant="ghost" size="icon">
-          <Settings className="h-5 w-5 text-gray-600" />
-        </Button>
+        <NotificationCenter />
+        <Link to="/settings">
+          <Button variant="ghost" size="icon">
+            <Settings className="h-5 w-5 text-gray-600" />
+          </Button>
+        </Link>
         <div className="flex items-center gap-2 ml-2">
           <Avatar>
             <AvatarImage
@@ -54,7 +67,9 @@ const DashboardHeader = ({
             <AvatarFallback>JD</AvatarFallback>
           </Avatar>
           <div className="hidden md:block">
-            <p className="text-sm font-medium">John Doe</p>
+            <p className="text-sm font-medium">
+              {user?.email?.split("@")[0] || "User"}
+            </p>
             <p className="text-xs text-gray-500">Maintenance Manager</p>
           </div>
         </div>

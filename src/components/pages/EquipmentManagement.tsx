@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardHeader from "../dashboard/DashboardHeader";
 import Sidebar from "../layout/Sidebar";
 import { Button } from "../ui/button";
@@ -20,21 +20,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Download, Edit, Plus, Search, Trash2 } from "lucide-react";
-import EquipmentManagementModal from "../equipment/EquipmentManagementModal";
-
-interface Equipment {
-  id: string;
-  name: string;
-  category: string;
-  department: string;
-  status: "operational" | "maintenance" | "out-of-service";
-  lastMaintenance: string;
-  nextMaintenance: string;
-  purchaseDate: string;
-  serialNumber: string;
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "../ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { Download, Edit, Plus, Search, Trash2, Loader2 } from "lucide-react";
+import { useEquipment, useCategories, useDepartments } from "../../lib/hooks";
+import {
+  Equipment,
+  EquipmentInsert,
+  EquipmentUpdate,
+} from "../../lib/api/equipment";
+import { Label } from "../ui/label";
 
 const EquipmentManagement = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -43,139 +54,177 @@ const EquipmentManagement = () => {
   const [selectedDepartment, setSelectedDepartment] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [equipmentToDelete, setEquipmentToDelete] = useState<string | null>(
     null,
   );
 
-  // Mock data for equipment list
-  const equipmentList: Equipment[] = [
-    {
-      id: "1",
-      name: "Industrial Mixer",
-      category: "Production",
-      department: "Manufacturing",
-      status: "operational",
-      lastMaintenance: "2023-10-15",
-      nextMaintenance: "2024-01-15",
-      purchaseDate: "2020-05-10",
-      serialNumber: "MIX-2020-001",
-    },
-    {
-      id: "2",
-      name: "Conveyor Belt A",
-      category: "Production",
-      department: "Assembly",
-      status: "maintenance",
-      lastMaintenance: "2023-11-05",
-      nextMaintenance: "2023-12-05",
-      purchaseDate: "2019-08-22",
-      serialNumber: "CONV-2019-A",
-    },
-    {
-      id: "3",
-      name: "HVAC System",
-      category: "Facility",
-      department: "Building Services",
-      status: "operational",
-      lastMaintenance: "2023-09-20",
-      nextMaintenance: "2024-03-20",
-      purchaseDate: "2021-01-15",
-      serialNumber: "HVAC-2021-003",
-    },
-    {
-      id: "4",
-      name: "Forklift #2",
-      category: "Transportation",
-      department: "Warehouse",
-      status: "out-of-service",
-      lastMaintenance: "2023-08-10",
-      nextMaintenance: "2023-11-10",
-      purchaseDate: "2018-11-30",
-      serialNumber: "FL-2018-002",
-    },
-    {
-      id: "5",
-      name: "CNC Machine #3",
-      category: "Production",
-      department: "Manufacturing",
-      status: "operational",
-      lastMaintenance: "2023-10-25",
-      nextMaintenance: "2024-01-25",
-      purchaseDate: "2022-03-18",
-      serialNumber: "CNC-2022-003",
-    },
-    {
-      id: "6",
-      name: "Server Rack B",
-      category: "IT",
-      department: "IT Services",
-      status: "operational",
-      lastMaintenance: "2023-11-01",
-      nextMaintenance: "2024-02-01",
-      purchaseDate: "2021-07-12",
-      serialNumber: "SRV-2021-B",
-    },
-  ];
+  // Form states
+  const [equipmentName, setEquipmentName] = useState("");
+  const [serialNumber, setSerialNumber] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [status, setStatus] = useState<
+    "operational" | "maintenance" | "out-of-service"
+  >("operational");
+  const [purchaseDate, setPurchaseDate] = useState("");
+  const [lastMaintenance, setLastMaintenance] = useState("");
+  const [nextMaintenance, setNextMaintenance] = useState("");
+  const [notes, setNotes] = useState("");
 
-  // Mock data for categories and departments
-  const categories = [
-    "Production",
-    "Facility",
-    "Transportation",
-    "IT",
-    "Office",
-  ];
-  const departments = [
-    "Manufacturing",
-    "Assembly",
-    "Building Services",
-    "Warehouse",
-    "IT Services",
-    "Administration",
-  ];
-  const statuses = ["operational", "maintenance", "out-of-service"];
+  // Get equipment, categories, and departments from hooks
+  const {
+    equipment,
+    loading: equipmentLoading,
+    error: equipmentError,
+    addEquipment,
+    editEquipment,
+    removeEquipment,
+  } = useEquipment();
+
+  const { categories, loading: categoriesLoading } = useCategories();
+  const { departments, loading: departmentsLoading } = useDepartments();
+
+  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(
+    null,
+  );
 
   const handleToggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
   // Filter equipment based on search and filters
-  const filteredEquipment = equipmentList.filter((equipment) => {
+  const filteredEquipment = equipment.filter((equip) => {
     const matchesSearch =
-      equipment.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      equipment.serialNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      equip.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (equip.serial_number &&
+        equip.serial_number.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesCategory =
-      selectedCategory === "all" || equipment.category === selectedCategory;
+      selectedCategory === "all" || equip.category_id === selectedCategory;
     const matchesDepartment =
       selectedDepartment === "all" ||
-      equipment.department === selectedDepartment;
+      equip.department_id === selectedDepartment;
     const matchesStatus =
-      selectedStatus === "all" || equipment.status === selectedStatus;
+      selectedStatus === "all" || equip.status === selectedStatus;
 
     return (
       matchesSearch && matchesCategory && matchesDepartment && matchesStatus
     );
   });
 
+  // Equipment CRUD operations
   const handleAddEquipment = () => {
     setSelectedEquipment(null);
+    resetForm();
     setModalOpen(true);
   };
 
-  const handleEditEquipment = (equipment: Equipment) => {
-    setSelectedEquipment(equipment);
+  const handleEditEquipment = (equip: Equipment) => {
+    setSelectedEquipment(equip);
+    setEquipmentName(equip.name);
+    setSerialNumber(equip.serial_number || "");
+    setCategoryId(equip.category_id);
+    setDepartmentId(equip.department_id);
+    setStatus(equip.status);
+    setPurchaseDate(equip.purchase_date || "");
+    setLastMaintenance(equip.last_maintenance || "");
+    setNextMaintenance(equip.next_maintenance || "");
+    setNotes(equip.notes || "");
     setModalOpen(true);
   };
 
   const handleDeleteEquipment = (id: string) => {
-    // In a real application, you would show a confirmation dialog and delete the equipment
-    console.log(`Delete equipment with ID: ${id}`);
+    setEquipmentToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteEquipment = async () => {
+    if (equipmentToDelete) {
+      try {
+        await removeEquipment(equipmentToDelete);
+        setDeleteDialogOpen(false);
+        setEquipmentToDelete(null);
+      } catch (error) {
+        console.error("Error deleting equipment:", error);
+      }
+    }
+  };
+
+  const resetForm = () => {
+    setEquipmentName("");
+    setSerialNumber("");
+    setCategoryId("");
+    setDepartmentId("");
+    setStatus("operational");
+    setPurchaseDate("");
+    setLastMaintenance("");
+    setNextMaintenance("");
+    setNotes("");
+  };
+
+  const validateForm = () => {
+    if (!equipmentName) {
+      alert("Equipment name is required");
+      return false;
+    }
+    if (!categoryId) {
+      alert("Category is required");
+      return false;
+    }
+    if (!departmentId) {
+      alert("Department is required");
+      return false;
+    }
+    return true;
+  };
+
+  const handleEquipmentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    try {
+      if (selectedEquipment) {
+        // Update existing equipment
+        const equipmentUpdate: EquipmentUpdate = {
+          name: equipmentName,
+          serial_number: serialNumber,
+          category_id: categoryId,
+          department_id: departmentId,
+          status: status,
+          purchase_date: purchaseDate || null,
+          last_maintenance: lastMaintenance || null,
+          next_maintenance: nextMaintenance || null,
+          notes: notes,
+        };
+        await editEquipment(selectedEquipment.id, equipmentUpdate);
+      } else {
+        // Create new equipment
+        const newEquipment: EquipmentInsert = {
+          name: equipmentName,
+          serial_number: serialNumber,
+          category_id: categoryId,
+          department_id: departmentId,
+          status: status,
+          purchase_date: purchaseDate || null,
+          last_maintenance: lastMaintenance || null,
+          next_maintenance: nextMaintenance || null,
+          notes: notes,
+        };
+        await addEquipment(newEquipment);
+      }
+      setModalOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error saving equipment:", error);
+    }
   };
 
   const handleExportData = () => {
     // In a real application, you would generate and download a CSV/Excel file
     console.log("Exporting equipment data");
+    alert("Export functionality would be implemented here");
   };
 
   const getStatusBadgeColor = (status: string) => {
@@ -201,6 +250,18 @@ const EquipmentManagement = () => {
       default:
         return <Badge>Unknown</Badge>;
     }
+  };
+
+  // Helper function to get category name by ID
+  const getCategoryName = (categoryId: string) => {
+    const category = categories.find((cat) => cat.id === categoryId);
+    return category ? category.name : "Unknown Category";
+  };
+
+  // Helper function to get department name by ID
+  const getDepartmentName = (departmentId: string) => {
+    const department = departments.find((dept) => dept.id === departmentId);
+    return department ? department.name : "Unknown Department";
   };
 
   return (
@@ -251,8 +312,8 @@ const EquipmentManagement = () => {
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
                           {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category}
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -267,8 +328,11 @@ const EquipmentManagement = () => {
                         <SelectContent>
                           <SelectItem value="all">All Departments</SelectItem>
                           {departments.map((department) => (
-                            <SelectItem key={department} value={department}>
-                              {department}
+                            <SelectItem
+                              key={department.id}
+                              value={department.id}
+                            >
+                              {department.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -282,11 +346,15 @@ const EquipmentManagement = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Statuses</SelectItem>
-                          {statuses.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="operational">
+                            Operational
+                          </SelectItem>
+                          <SelectItem value="maintenance">
+                            Maintenance
+                          </SelectItem>
+                          <SelectItem value="out-of-service">
+                            Out of Service
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <Button variant="outline" onClick={handleExportData}>
@@ -312,28 +380,51 @@ const EquipmentManagement = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredEquipment.length > 0 ? (
-                          filteredEquipment.map((equipment) => (
-                            <TableRow key={equipment.id}>
+                        {equipmentLoading ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={8}
+                              className="text-center py-10"
+                            >
+                              <div className="flex justify-center items-center">
+                                <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                <span>Loading equipment...</span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ) : equipmentError ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={8}
+                              className="text-center py-6 text-red-500"
+                            >
+                              Error loading equipment. Please try again.
+                            </TableCell>
+                          </TableRow>
+                        ) : filteredEquipment.length > 0 ? (
+                          filteredEquipment.map((equip) => (
+                            <TableRow key={equip.id}>
                               <TableCell className="font-medium">
-                                {equipment.name}
+                                {equip.name}
                               </TableCell>
-                              <TableCell>{equipment.serialNumber}</TableCell>
-                              <TableCell>{equipment.category}</TableCell>
-                              <TableCell>{equipment.department}</TableCell>
+                              <TableCell>{equip.serial_number}</TableCell>
                               <TableCell>
-                                {getStatusBadgeColor(equipment.status)}
+                                {getCategoryName(equip.category_id)}
                               </TableCell>
-                              <TableCell>{equipment.lastMaintenance}</TableCell>
-                              <TableCell>{equipment.nextMaintenance}</TableCell>
+                              <TableCell>
+                                {getDepartmentName(equip.department_id)}
+                              </TableCell>
+                              <TableCell>
+                                {getStatusBadgeColor(equip.status)}
+                              </TableCell>
+                              <TableCell>{equip.last_maintenance}</TableCell>
+                              <TableCell>{equip.next_maintenance}</TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end space-x-2">
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() =>
-                                      handleEditEquipment(equipment)
-                                    }
+                                    onClick={() => handleEditEquipment(equip)}
                                   >
                                     <Edit size={16} />
                                   </Button>
@@ -341,7 +432,7 @@ const EquipmentManagement = () => {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() =>
-                                      handleDeleteEquipment(equipment.id)
+                                      handleDeleteEquipment(equip.id)
                                     }
                                   >
                                     <Trash2 size={16} />
@@ -370,8 +461,198 @@ const EquipmentManagement = () => {
         </div>
       </div>
 
-      {/* Equipment Management Modal */}
-      <EquipmentManagementModal open={modalOpen} onOpenChange={setModalOpen} />
+      {/* Equipment Form Modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedEquipment ? "Edit Equipment" : "Add New Equipment"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedEquipment
+                ? "Update the equipment details below."
+                : "Fill in the details to add new equipment."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEquipmentSubmit}>
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="equipment-name">Equipment Name *</Label>
+                  <Input
+                    id="equipment-name"
+                    placeholder="Enter equipment name"
+                    value={equipmentName}
+                    onChange={(e) => setEquipmentName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="serial-number">Serial Number</Label>
+                  <Input
+                    id="serial-number"
+                    placeholder="Enter serial number"
+                    value={serialNumber}
+                    onChange={(e) => setSerialNumber(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="category">Category *</Label>
+                  <Select
+                    value={categoryId}
+                    onValueChange={setCategoryId}
+                    required
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoriesLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading categories...
+                        </SelectItem>
+                      ) : (
+                        categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department *</Label>
+                  <Select
+                    value={departmentId}
+                    onValueChange={setDepartmentId}
+                    required
+                  >
+                    <SelectTrigger id="department">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentsLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading departments...
+                        </SelectItem>
+                      ) : (
+                        departments.map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={status}
+                    onValueChange={(
+                      value: "operational" | "maintenance" | "out-of-service",
+                    ) => setStatus(value)}
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="operational">Operational</SelectItem>
+                      <SelectItem value="maintenance">Maintenance</SelectItem>
+                      <SelectItem value="out-of-service">
+                        Out of Service
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="purchase-date">Purchase Date</Label>
+                  <Input
+                    id="purchase-date"
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last-maintenance">
+                    Last Maintenance Date
+                  </Label>
+                  <Input
+                    id="last-maintenance"
+                    type="date"
+                    value={lastMaintenance}
+                    onChange={(e) => setLastMaintenance(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="next-maintenance">
+                    Next Maintenance Date
+                  </Label>
+                  <Input
+                    id="next-maintenance"
+                    type="date"
+                    value={nextMaintenance}
+                    onChange={(e) => setNextMaintenance(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <textarea
+                  id="notes"
+                  rows={3}
+                  className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                  placeholder="Enter any additional notes about this equipment"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
+              <div className="text-sm text-gray-500">* Required fields</div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setModalOpen(false);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                {selectedEquipment ? "Update Equipment" : "Add Equipment"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete this equipment?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              equipment and remove it from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteEquipment}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -1,194 +1,116 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  CalendarPlus,
-  Clipboard,
-  FileBarChart,
-  Plus,
-  Settings,
+  Calendar,
   Wrench,
+  ClipboardList,
+  BarChart3,
+  Plus,
+  Building2,
 } from "lucide-react";
+import { MaintenanceSchedulingModal } from "../maintenance/MaintenanceSchedulingModal";
+import { EquipmentManagementModal } from "../equipment/EquipmentManagementModal";
+import { CategoryManagementModal } from "../management/CategoryManagementModal";
+import { DepartmentManagementModal } from "../management/DepartmentManagementModal";
 
-interface QuickActionProps {
-  title: string;
-  icon: React.ReactNode;
-  description: string;
-  onClick?: () => void;
-}
-
-const QuickActionButton = ({
-  title,
-  icon,
-  description,
-  onClick,
-}: QuickActionProps) => {
-  return (
-    <Button
-      variant="outline"
-      className="h-auto p-4 flex flex-col items-center justify-center gap-2 w-full bg-white hover:bg-gray-50"
-      onClick={onClick}
-    >
-      <div className="p-2 rounded-full bg-blue-100 text-blue-600">{icon}</div>
-      <span className="font-medium text-sm">{title}</span>
-      <p className="text-xs text-gray-500 text-center">{description}</p>
-    </Button>
-  );
-};
-
-interface QuickActionsProps {
-  onScheduleMaintenance?: () => void;
-  onAddEquipment?: () => void;
-  onGenerateReport?: () => void;
-  onManageCategories?: () => void;
-}
-
-const QuickActions = ({
-  onScheduleMaintenance,
-  onAddEquipment,
-  onGenerateReport,
-  onManageCategories,
-}: QuickActionsProps) => {
+const QuickActions = () => {
+  const navigate = useNavigate();
   const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
   const [equipmentModalOpen, setEquipmentModalOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
 
-  const handleScheduleMaintenance = () => {
-    if (onScheduleMaintenance) {
-      onScheduleMaintenance();
-    } else {
-      setMaintenanceModalOpen(true);
-    }
-  };
-
-  const handleAddEquipment = () => {
-    if (onAddEquipment) {
-      onAddEquipment();
-    } else {
-      setEquipmentModalOpen(true);
-    }
-  };
-
-  const handleManageCategories = () => {
-    if (onManageCategories) {
-      onManageCategories();
-    } else {
-      setCategoryModalOpen(true);
-    }
-  };
+  const actions = [
+    {
+      title: "Schedule Maintenance",
+      icon: <Calendar className="h-5 w-5" />,
+      description: "Create a new maintenance task",
+      action: () => setMaintenanceModalOpen(true),
+      color: "bg-blue-100 text-blue-700",
+    },
+    {
+      title: "Add Equipment",
+      icon: <Wrench className="h-5 w-5" />,
+      description: "Register new equipment",
+      action: () => setEquipmentModalOpen(true),
+      color: "bg-green-100 text-green-700",
+    },
+    {
+      title: "Add Category",
+      icon: <ClipboardList className="h-5 w-5" />,
+      description: "Create a new category",
+      action: () => setCategoryModalOpen(true),
+      color: "bg-purple-100 text-purple-700",
+    },
+    {
+      title: "Add Department",
+      icon: <Building2 className="h-5 w-5" />,
+      description: "Create a new department",
+      action: () => setDepartmentModalOpen(true),
+      color: "bg-orange-100 text-orange-700",
+    },
+    {
+      title: "View Reports",
+      icon: <BarChart3 className="h-5 w-5" />,
+      description: "View maintenance reports",
+      action: () => navigate("/reports"),
+      color: "bg-red-100 text-red-700",
+    },
+  ];
 
   return (
-    <Card className="bg-white shadow-sm h-full">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">Quick Actions</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-4">
-          <Dialog
-            open={maintenanceModalOpen}
-            onOpenChange={setMaintenanceModalOpen}
-          >
-            <DialogTrigger asChild>
-              <div>
-                <QuickActionButton
-                  title="Schedule Maintenance"
-                  icon={<CalendarPlus size={20} />}
-                  description="Create a new maintenance task"
-                  onClick={handleScheduleMaintenance}
-                />
-              </div>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[800px]">
-              <DialogHeader>
-                <DialogTitle>Schedule Maintenance</DialogTitle>
-              </DialogHeader>
-              <div className="p-4">
-                <p className="text-center text-gray-500">
-                  Maintenance scheduling form would go here
-                </p>
-              </div>
-            </DialogContent>
-          </Dialog>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {actions.map((action, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                className="h-auto py-4 px-4 justify-start flex-col items-start space-y-2 border-2 hover:border-primary hover:bg-primary/5 transition-colors"
+                onClick={action.action}
+              >
+                <div className={`p-2 rounded-full ${action.color}`}>
+                  {action.icon}
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold">{action.title}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {action.description}
+                  </div>
+                </div>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-          <Dialog
-            open={equipmentModalOpen}
-            onOpenChange={setEquipmentModalOpen}
-          >
-            <DialogTrigger asChild>
-              <div>
-                <QuickActionButton
-                  title="Add Equipment"
-                  icon={<Plus size={20} />}
-                  description="Register new equipment"
-                  onClick={handleAddEquipment}
-                />
-              </div>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[800px]">
-              <DialogHeader>
-                <DialogTitle>Equipment Management</DialogTitle>
-              </DialogHeader>
-              <div className="p-4">
-                <p className="text-center text-gray-500">
-                  Equipment management form would go here
-                </p>
-              </div>
-            </DialogContent>
-          </Dialog>
+      {/* Modals */}
+      <MaintenanceSchedulingModal
+        open={maintenanceModalOpen}
+        onOpenChange={setMaintenanceModalOpen}
+      />
 
-          <QuickActionButton
-            title="Generate Report"
-            icon={<FileBarChart size={20} />}
-            description="Create maintenance reports"
-            onClick={onGenerateReport || (() => {})}
-          />
+      <EquipmentManagementModal
+        open={equipmentModalOpen}
+        onOpenChange={setEquipmentModalOpen}
+      />
 
-          <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
-            <DialogTrigger asChild>
-              <div>
-                <QuickActionButton
-                  title="Manage Categories"
-                  icon={<Settings size={20} />}
-                  description="Edit categories and departments"
-                  onClick={handleManageCategories}
-                />
-              </div>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Category Management</DialogTitle>
-              </DialogHeader>
-              <div className="p-4">
-                <p className="text-center text-gray-500">
-                  Category management form would go here
-                </p>
-              </div>
-            </DialogContent>
-          </Dialog>
+      <CategoryManagementModal
+        open={categoryModalOpen}
+        onOpenChange={setCategoryModalOpen}
+      />
 
-          <QuickActionButton
-            title="Request Service"
-            icon={<Wrench size={20} />}
-            description="Submit service request"
-            onClick={() => {}}
-          />
-
-          <QuickActionButton
-            title="View Checklists"
-            icon={<Clipboard size={20} />}
-            description="Access maintenance checklists"
-            onClick={() => {}}
-          />
-        </div>
-      </CardContent>
-    </Card>
+      <DepartmentManagementModal
+        open={departmentModalOpen}
+        onOpenChange={setDepartmentModalOpen}
+      />
+    </>
   );
 };
 

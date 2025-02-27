@@ -1,91 +1,127 @@
-import React from "react";
-import { Card, CardContent } from "../ui/card";
-import {
-  BarChart3,
-  CheckCircle,
-  Clock,
-  Wrench,
-  AlertTriangle,
-} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMaintenanceTasks, useEquipment } from "@/lib/hooks";
+import { Wrench, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 
-interface MetricProps {
-  title: string;
-  value: number;
-  change: string;
-  trend: "up" | "down" | "neutral";
-  icon: React.ReactNode;
-}
+const MetricsOverview = () => {
+  const { tasks, loading: tasksLoading } = useMaintenanceTasks();
+  const { equipment, loading: equipmentLoading } = useEquipment();
+  const [metrics, setMetrics] = useState({
+    totalEquipment: 0,
+    equipmentInMaintenance: 0,
+    equipmentOutOfService: 0,
+    scheduledTasks: 0,
+    overdueTasks: 0,
+    completedTasks: 0,
+    inProgressTasks: 0,
+  });
 
-const MetricCard = ({ title, value, change, trend, icon }: MetricProps) => {
-  return (
-    <Card className="bg-white">
-      <CardContent className="p-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-sm font-medium text-gray-500">{title}</p>
-            <h3 className="text-3xl font-bold mt-1">{value}</h3>
-          </div>
-          <div
-            className={`p-2 rounded-full ${trend === "up" ? "bg-green-100 text-green-600" : trend === "down" ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-600"}`}
-          >
-            {icon}
-          </div>
-        </div>
-        <div className="mt-2 flex items-center">
-          <span
-            className={`text-sm ${trend === "up" ? "text-green-600" : trend === "down" ? "text-red-600" : "text-gray-600"}`}
-          >
-            {change}
-          </span>
-          <span className="text-sm text-gray-500 ml-1">from last month</span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+  useEffect(() => {
+    if (!tasksLoading && !equipmentLoading) {
+      // Calculate metrics
+      const today = new Date();
 
-interface MetricsOverviewProps {
-  metrics?: MetricProps[];
-}
+      const scheduledTasks = tasks.filter(
+        (task) => task.status === "scheduled",
+      ).length;
+      const overdueTasks = tasks.filter((task) => {
+        const dueDate = new Date(task.scheduled_date);
+        return (
+          dueDate < today &&
+          task.status !== "completed" &&
+          task.status !== "cancelled"
+        );
+      }).length;
+      const completedTasks = tasks.filter(
+        (task) => task.status === "completed",
+      ).length;
+      const inProgressTasks = tasks.filter(
+        (task) => task.status === "in-progress",
+      ).length;
 
-const MetricsOverview = ({
-  metrics = [
+      const totalEquipment = equipment.length;
+      const equipmentInMaintenance = equipment.filter(
+        (equip) => equip.status === "maintenance",
+      ).length;
+      const equipmentOutOfService = equipment.filter(
+        (equip) => equip.status === "out-of-service",
+      ).length;
+
+      setMetrics({
+        totalEquipment,
+        equipmentInMaintenance,
+        equipmentOutOfService,
+        scheduledTasks,
+        overdueTasks,
+        completedTasks,
+        inProgressTasks,
+      });
+    }
+  }, [tasks, equipment, tasksLoading, equipmentLoading]);
+
+  const metricCards = [
     {
       title: "Total Equipment",
-      value: 128,
-      change: "+3%",
-      trend: "up" as const,
+      value: metrics.totalEquipment,
       icon: <Wrench className="h-5 w-5" />,
+      color: "bg-blue-100 text-blue-700",
+    },
+    {
+      title: "Equipment in Maintenance",
+      value: metrics.equipmentInMaintenance,
+      icon: <Wrench className="h-5 w-5" />,
+      color: "bg-yellow-100 text-yellow-700",
+    },
+    {
+      title: "Equipment Out of Service",
+      value: metrics.equipmentOutOfService,
+      icon: <AlertTriangle className="h-5 w-5" />,
+      color: "bg-red-100 text-red-700",
     },
     {
       title: "Scheduled Tasks",
-      value: 42,
-      change: "+12%",
-      trend: "up" as const,
+      value: metrics.scheduledTasks,
       icon: <Clock className="h-5 w-5" />,
-    },
-    {
-      title: "Completed Tasks",
-      value: 89,
-      change: "+5%",
-      trend: "up" as const,
-      icon: <CheckCircle className="h-5 w-5" />,
+      color: "bg-purple-100 text-purple-700",
     },
     {
       title: "Overdue Tasks",
-      value: 7,
-      change: "-2%",
-      trend: "down" as const,
+      value: metrics.overdueTasks,
       icon: <AlertTriangle className="h-5 w-5" />,
+      color: "bg-red-100 text-red-700",
     },
-  ],
-}: MetricsOverviewProps) => {
+    {
+      title: "Completed Tasks",
+      value: metrics.completedTasks,
+      icon: <CheckCircle className="h-5 w-5" />,
+      color: "bg-green-100 text-green-700",
+    },
+  ];
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {metrics.map((metric, index) => (
-        <MetricCard key={index} {...metric} />
-      ))}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Metrics Overview</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {metricCards.map((metric, index) => (
+            <div
+              key={index}
+              className="flex flex-col items-center justify-center p-4 rounded-lg border bg-card text-card-foreground shadow-sm"
+            >
+              <div className={`p-2 rounded-full ${metric.color} mb-2`}>
+                {metric.icon}
+              </div>
+              <div className="text-2xl font-bold">{metric.value}</div>
+              <div className="text-sm text-muted-foreground">
+                {metric.title}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
+  LogOut,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -19,6 +20,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
+import { useSupabase } from "../context/SupabaseProvider";
+import { toast } from "../../lib/utils/toast";
 
 interface SidebarProps {
   collapsed?: boolean;
@@ -28,6 +31,7 @@ interface SidebarProps {
 const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
   const [isCollapsed, setIsCollapsed] = useState(collapsed);
   const location = useLocation();
+  const { signOut } = useSupabase();
 
   const handleToggle = () => {
     setIsCollapsed(!isCollapsed);
@@ -59,6 +63,11 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
       name: "Reports & History",
       path: "/reports",
       icon: <BarChart3 className="h-5 w-5" />,
+    },
+    {
+      name: "User Management",
+      path: "/users",
+      icon: <ClipboardList className="h-5 w-5" />,
     },
     {
       name: "Settings",
@@ -153,11 +162,27 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
             <span className="text-primary font-medium">MS</span>
           </div>
           {!isCollapsed && (
-            <div>
+            <div className="flex-1">
               <p className="font-medium">Maintenance System</p>
               <p className="text-xs">Admin</p>
             </div>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={async () => {
+              try {
+                await signOut();
+                toast.success("Logged out successfully");
+              } catch (error) {
+                console.error("Logout error:", error);
+                toast.error("Failed to log out");
+              }
+            }}
+            title="Sign Out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>

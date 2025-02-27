@@ -28,10 +28,17 @@ import {
   Download,
   FileText,
   Filter,
-  PieChart,
+  PieChart as PieChartIcon,
   Search,
   Sliders,
 } from "lucide-react";
+import {
+  BarChart,
+  PieChart,
+  LineChart,
+  MetricCard,
+} from "../reports/ChartComponents";
+import { useReports } from "@/lib/hooks";
 
 interface MaintenanceRecord {
   id: string;
@@ -387,13 +394,97 @@ const ReportsHistory = () => {
 
               {/* Generate Reports Tab */}
               <TabsContent value="reports" className="mt-6">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold">Generate Reports</h2>
-                  <p className="text-gray-500 mt-1">
-                    Create and download various maintenance reports
-                  </p>
+                <div className="mb-6 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-bold">Generate Reports</h2>
+                    <p className="text-gray-500 mt-1">
+                      Create and download various maintenance reports
+                    </p>
+                  </div>
+                  <div className="flex gap-4">
+                    <Select defaultValue="last30days">
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select date range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="last7days">Last 7 days</SelectItem>
+                        <SelectItem value="last30days">Last 30 days</SelectItem>
+                        <SelectItem value="last90days">Last 90 days</SelectItem>
+                        <SelectItem value="thisyear">This year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline">
+                      <Download className="mr-2 h-4 w-4" /> Export All
+                    </Button>
+                  </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <MetricCard
+                    title="Total Tasks"
+                    value={128}
+                    trend="up"
+                    trendValue="+12% from last month"
+                    icon={<FileText className="h-5 w-5" />}
+                  />
+                  <MetricCard
+                    title="Completion Rate"
+                    value="87%"
+                    trend="up"
+                    trendValue="+5% from last month"
+                    icon={<BarChart3 className="h-5 w-5" />}
+                  />
+                  <MetricCard
+                    title="Avg. Resolution Time"
+                    value="2.4 days"
+                    trend="down"
+                    trendValue="-0.5 days from last month"
+                    icon={<Calendar className="h-5 w-5" />}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <BarChart
+                    title="Maintenance Tasks by Status"
+                    data={[
+                      { label: "Completed", value: 89, color: "bg-green-500" },
+                      {
+                        label: "In Progress",
+                        value: 32,
+                        color: "bg-yellow-500",
+                      },
+                      { label: "Scheduled", value: 42, color: "bg-blue-500" },
+                      { label: "Cancelled", value: 12, color: "bg-red-500" },
+                      { label: "Partial", value: 7, color: "bg-purple-500" },
+                    ]}
+                  />
+                  <PieChart
+                    title="Tasks by Priority"
+                    data={[
+                      { label: "Critical", value: 15, color: "#ef4444" },
+                      { label: "High", value: 28, color: "#f97316" },
+                      { label: "Medium", value: 45, color: "#3b82f6" },
+                      { label: "Low", value: 40, color: "#22c55e" },
+                    ]}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-6 mb-6">
+                  <LineChart
+                    title="Maintenance Tasks Over Time"
+                    data={[
+                      { label: "Jan", value: 42 },
+                      { label: "Feb", value: 38 },
+                      { label: "Mar", value: 55 },
+                      { label: "Apr", value: 47 },
+                      { label: "May", value: 60 },
+                      { label: "Jun", value: 55 },
+                      { label: "Jul", value: 70 },
+                    ]}
+                  />
+                </div>
+
+                <h3 className="text-xl font-semibold mb-4">Report Templates</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {/* Maintenance Summary Report */}
                   <Card className="hover:shadow-md transition-shadow">
@@ -447,7 +538,7 @@ const ReportsHistory = () => {
                   <Card className="hover:shadow-md transition-shadow">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <PieChart className="h-5 w-5 text-purple-500" />
+                        <PieChartIcon className="h-5 w-5 text-purple-500" />
                         Department Analysis
                       </CardTitle>
                     </CardHeader>

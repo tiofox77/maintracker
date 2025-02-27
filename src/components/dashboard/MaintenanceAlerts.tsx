@@ -1,186 +1,173 @@
-import React from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import React, { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Bell, AlertTriangle, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useMaintenanceTasks, useEquipment } from "@/lib/hooks";
+import { format, parseISO, isValid, isBefore, addDays } from "date-fns";
+import { AlertTriangle, Calendar, CheckCircle } from "lucide-react";
+import { MaintenanceSchedulingModal } from "../maintenance/MaintenanceSchedulingModal";
 
-interface MaintenanceTask {
+interface Alert {
   id: string;
-  equipmentName: string;
-  department: string;
-  dueDate: string;
-  priority: "high" | "medium" | "low";
-  status: "upcoming" | "overdue";
+  title: string;
+  equipment: string;
+  date: string;
+  type: "overdue" | "upcoming" | "today";
+  taskId: string;
 }
 
-interface MaintenanceAlertsProps {
-  tasks?: MaintenanceTask[];
-  title?: string;
-}
+const MaintenanceAlerts = () => {
+  const { tasks, loading: tasksLoading, completeTask } = useMaintenanceTasks();
+  const { equipment } = useEquipment();
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-const MaintenanceAlerts = ({
-  tasks = [
-    {
-      id: "1",
-      equipmentName: "HVAC System",
-      department: "Facilities",
-      dueDate: "2023-06-15",
-      priority: "high",
-      status: "overdue",
-    },
-    {
-      id: "2",
-      equipmentName: "CNC Machine #3",
-      department: "Manufacturing",
-      dueDate: "2023-06-18",
-      priority: "medium",
-      status: "upcoming",
-    },
-    {
-      id: "3",
-      equipmentName: "Conveyor Belt A",
-      department: "Logistics",
-      dueDate: "2023-06-20",
-      priority: "high",
-      status: "upcoming",
-    },
-    {
-      id: "4",
-      equipmentName: "Server Rack B",
-      department: "IT",
-      dueDate: "2023-06-14",
-      priority: "medium",
-      status: "overdue",
-    },
-    {
-      id: "5",
-      equipmentName: "Forklift #2",
-      department: "Warehouse",
-      dueDate: "2023-06-22",
-      priority: "low",
-      status: "upcoming",
-    },
-  ],
-  title = "Maintenance Alerts",
-}: MaintenanceAlertsProps) => {
-  // Format date to be more readable
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+  useEffect(() => {
+    if (!tasksLoading) {
+      const today = new Date();
+      const threeDaysFromNow = addDays(today, 3);
+      const newAlerts: Alert[] = [];
+
+      // Filter for relevant tasks
+      tasks
+        .filter(
+          (task) => task.status !== "completed" && task.status !== "cancelled",
+        )
+        .forEach((task) => {
+          const dueDate = parseISO(task.scheduled_date);
+          if (!isValid(dueDate)) return;
+
+          const equipmentItem = equipment.find(
+            (e) => e.id === task.equipment_id,
+          );
+          const equipmentName = equipmentItem
+            ? equipmentItem.name
+            : "Unknown Equipment";
+
+          // Check if task is overdue
+          if (isBefore(dueDate, today)) {
+            newAlerts.push({
+              id: `overdue-${task.id}`,
+              title: task.title,
+              equipment: equipmentName,
+              date: format(dueDate, "MMM d, yyyy"),
+              type: "overdue",
+              taskId: task.id,
+            });
+          }
+          // Check if task is due today
+          else if (dueDate.toDateString() === today.toDateString()) {
+            newAlerts.push({
+              id: `today-${task.id}`,
+              title: task.title,
+              equipment: equipmentName,
+              date: "Today",
+              type: "today",
+              taskId: task.id,
+            });
+          }
+          // Check if task is upcoming (within 3 days)
+          else if (isBefore(dueDate, threeDaysFromNow)) {
+            newAlerts.push({
+              id: `upcoming-${task.id}`,
+              title: task.title,
+              equipment: equipmentName,
+              date: format(dueDate, "MMM d, yyyy"),
+              type: "upcoming",
+              taskId: task.id,
+            });
+          }
+        });
+
+      // Sort alerts by priority: overdue first, then today, then upcoming
+      newAlerts.sort((a, b) => {
+        const priorityOrder = { overdue: 0, today: 1, upcoming: 2 };
+        return priorityOrder[a.type] - priorityOrder[b.type];
+      });
+
+      setAlerts(newAlerts);
+    }
+  }, [tasks, equipment, tasksLoading]);
+
+  const handleCompleteTask = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setModalOpen(true);
   };
 
-  // Get priority badge color
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return <Badge variant="destructive">High</Badge>;
-      case "medium":
-        return <Badge variant="secondary">Medium</Badge>;
-      case "low":
-        return <Badge variant="outline">Low</Badge>;
+  const getAlertBadge = (type: string) => {
+    switch (type) {
+      case "overdue":
+        return <Badge variant="destructive">Overdue</Badge>;
+      case "today":
+        return <Badge className="bg-yellow-100 text-yellow-800">Today</Badge>;
+      case "upcoming":
+        return <Badge variant="outline">Upcoming</Badge>;
       default:
         return <Badge>Unknown</Badge>;
     }
   };
 
-  // Get status icon
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "overdue":
-        return <AlertTriangle className="h-4 w-4 text-destructive" />;
-      case "upcoming":
-        return <Clock className="h-4 w-4 text-amber-500" />;
-      default:
-        return null;
-    }
-  };
-
-  // Separate overdue and upcoming tasks
-  const overdueTasks = tasks.filter((task) => task.status === "overdue");
-  const upcomingTasks = tasks.filter((task) => task.status === "upcoming");
-
   return (
-    <Card className="h-full bg-white overflow-hidden">
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5 text-amber-500" />
-          <CardTitle>{title}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="max-h-[340px] overflow-y-auto">
-          {overdueTasks.length > 0 && (
-            <div className="px-6 py-2 bg-red-50">
-              <h4 className="text-sm font-semibold text-destructive flex items-center gap-1">
-                <AlertTriangle className="h-4 w-4" />
-                Overdue Tasks ({overdueTasks.length})
-              </h4>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Maintenance Alerts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tasksLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : alerts.length > 0 ? (
+            <div className="space-y-4">
+              {alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className={`p-4 rounded-lg border ${alert.type === "overdue" ? "border-red-200 bg-red-50" : alert.type === "today" ? "border-yellow-200 bg-yellow-50" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium">{alert.title}</div>
+                      <div className="text-sm text-gray-500">
+                        {alert.equipment} • {alert.date}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {getAlertBadge(alert.type)}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleCompleteTask(alert.taskId)}
+                        title="Complete Task"
+                      >
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-32 text-center">
+              <Calendar className="h-10 w-10 text-gray-300 mb-2" />
+              <p className="text-gray-500">No maintenance alerts</p>
+              <p className="text-sm text-gray-400">
+                All scheduled tasks are on track
+              </p>
             </div>
           )}
-          {overdueTasks.map((task) => (
-            <div key={task.id} className="border-b p-4 hover:bg-gray-50">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium text-gray-900">
-                    {task.equipmentName}
-                  </h4>
-                  <p className="text-sm text-gray-500">{task.department}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getPriorityBadge(task.priority)}
-                  {getStatusIcon(task.status)}
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-1 text-sm text-red-600">
-                <Clock className="h-4 w-4" />
-                <span>Due: {formatDate(task.dueDate)}</span>
-              </div>
-            </div>
-          ))}
+        </CardContent>
+      </Card>
 
-          {upcomingTasks.length > 0 && (
-            <div className="px-6 py-2 bg-amber-50">
-              <h4 className="text-sm font-semibold text-amber-700 flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                Upcoming Tasks ({upcomingTasks.length})
-              </h4>
-            </div>
-          )}
-          {upcomingTasks.map((task) => (
-            <div
-              key={task.id}
-              className="border-b p-4 hover:bg-gray-50 last:border-0"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium text-gray-900">
-                    {task.equipmentName}
-                  </h4>
-                  <p className="text-sm text-gray-500">{task.department}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getPriorityBadge(task.priority)}
-                  {getStatusIcon(task.status)}
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-1 text-sm text-gray-600">
-                <Clock className="h-4 w-4" />
-                <span>Due: {formatDate(task.dueDate)}</span>
-              </div>
-            </div>
-          ))}
-
-          {tasks.length === 0 && (
-            <div className="p-6 text-center text-gray-500">
-              <p>No maintenance tasks scheduled</p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      {/* Complete Task Modal */}
+      <MaintenanceSchedulingModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        taskId={selectedTaskId}
+        mode="complete"
+      />
+    </>
   );
 };
 
