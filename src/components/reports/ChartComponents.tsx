@@ -15,7 +15,8 @@ interface BarChartProps {
 }
 
 export const BarChart = ({ title, data, height = 300 }: BarChartProps) => {
-  const maxValue = Math.max(...data.map((item) => item.value)) * 1.1; // Add 10% padding
+  // Add a small value to ensure bars are visible even with zero values
+  const maxValue = Math.max(...data.map((item) => item.value), 1) * 1.1; // Add 10% padding
 
   return (
     <Card>
@@ -26,7 +27,8 @@ export const BarChart = ({ title, data, height = 300 }: BarChartProps) => {
         <div style={{ height: `${height}px` }} className="relative">
           <div className="flex h-full items-end justify-between gap-2">
             {data.map((item, index) => {
-              const barHeight = (item.value / maxValue) * 100;
+              // Ensure minimum height for visibility
+              const barHeight = Math.max((item.value / maxValue) * 100, 1);
               return (
                 <div key={index} className="flex flex-col items-center flex-1">
                   <div

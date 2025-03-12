@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import {
@@ -12,6 +12,9 @@ import {
   ChevronRight,
   Building2,
   LogOut,
+  Truck,
+  ChevronDown,
+  Shield,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -30,6 +33,7 @@ interface SidebarProps {
 
 const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
   const [isCollapsed, setIsCollapsed] = useState(collapsed);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(["Maintenance"]);
   const location = useLocation();
   const { signOut } = useSupabase();
 
@@ -40,39 +44,91 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
 
   const navItems = [
     {
-      name: "Dashboard",
-      path: "/",
-      icon: <LayoutDashboard className="h-5 w-5" />,
-    },
-    {
-      name: "Maintenance Scheduling",
-      path: "/maintenance",
-      icon: <Calendar className="h-5 w-5" />,
-    },
-    {
-      name: "Equipment Management",
-      path: "/equipment",
+      name: "Maintenance",
       icon: <Wrench className="h-5 w-5" />,
+      submenu: [
+        {
+          name: "Dashboard",
+          path: "/",
+          icon: <LayoutDashboard className="h-5 w-5" />,
+        },
+        {
+          name: "Maintenance Scheduling",
+          path: "/maintenance",
+          icon: <Calendar className="h-5 w-5" />,
+        },
+        {
+          name: "Equipment Management",
+          path: "/equipment",
+          icon: <Wrench className="h-5 w-5" />,
+        },
+        {
+          name: "Category & Department",
+          path: "/categories",
+          icon: <Building2 className="h-5 w-5" />,
+        },
+        {
+          name: "Reports & History",
+          path: "/reports",
+          icon: <BarChart3 className="h-5 w-5" />,
+        },
+        {
+          name: "User Management",
+          path: "/users",
+          icon: <ClipboardList className="h-5 w-5" />,
+        },
+        {
+          name: "Role Permissions",
+          path: "/role-permissions",
+          icon: <Shield className="h-5 w-5" />,
+        },
+        {
+          name: "Settings",
+          path: "/settings",
+          icon: <Settings className="h-5 w-5" />,
+        },
+      ],
     },
     {
-      name: "Category & Department",
-      path: "/categories",
-      icon: <Building2 className="h-5 w-5" />,
-    },
-    {
-      name: "Reports & History",
-      path: "/reports",
-      icon: <BarChart3 className="h-5 w-5" />,
-    },
-    {
-      name: "User Management",
-      path: "/users",
-      icon: <ClipboardList className="h-5 w-5" />,
-    },
-    {
-      name: "Settings",
-      path: "/settings",
-      icon: <Settings className="h-5 w-5" />,
+      name: "Supply Chain",
+      icon: <Truck className="h-5 w-5" />,
+      submenu: [
+        {
+          name: "Material Requests",
+          path: "/supply-chain/material-requests",
+          icon: <ClipboardList className="h-5 w-5" />,
+        },
+        {
+          name: "Proforma Invoices",
+          path: "/supply-chain/proforma-invoices",
+          icon: <Calendar className="h-5 w-5" />,
+        },
+        {
+          name: "Departments",
+          path: "/supply-chain/departments",
+          icon: <Building2 className="h-5 w-5" />,
+        },
+        {
+          name: "Shipment Tracking",
+          path: "/supply-chain/shipments",
+          icon: <Truck className="h-5 w-5" />,
+        },
+        {
+          name: "Customs Clearance",
+          path: "/supply-chain/customs",
+          icon: <Building2 className="h-5 w-5" />,
+        },
+        {
+          name: "Port Processes",
+          path: "/supply-chain/port-processes",
+          icon: <BarChart3 className="h-5 w-5" />,
+        },
+        {
+          name: "Transport",
+          path: "/supply-chain/transport",
+          icon: <Truck className="h-5 w-5" />,
+        },
+      ],
     },
   ];
 
@@ -110,41 +166,90 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
       <div className="flex-1 py-6 overflow-y-auto">
         <nav className="space-y-1 px-2">
           <TooltipProvider delayDuration={0}>
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
+            {navItems.map((item, index) => {
+              const hasSubmenu = item.submenu && item.submenu.length > 0;
+              const isExpanded = expandedMenus.includes(item.name);
+
               return (
-                <Tooltip key={item.path} delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to={item.path}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
-                        isActive
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                        isCollapsed && "justify-center",
-                      )}
-                      onClick={(e) => {
-                        // Force navigation to refresh the page if needed
-                        if (
-                          item.path === "/settings" &&
-                          location.pathname === "/settings"
-                        ) {
-                          e.preventDefault();
-                          window.location.href = item.path;
-                        }
-                      }}
-                    >
-                      {item.icon}
-                      {!isCollapsed && <span>{item.name}</span>}
-                    </Link>
-                  </TooltipTrigger>
-                  {isCollapsed && (
-                    <TooltipContent side="right">
-                      <p>{item.name}</p>
-                    </TooltipContent>
+                <div key={index} className="space-y-1">
+                  {/* Main menu item */}
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer",
+                          isExpanded
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                          isCollapsed && "justify-center",
+                        )}
+                        onClick={() => {
+                          if (hasSubmenu) {
+                            setExpandedMenus((prev) =>
+                              prev.includes(item.name)
+                                ? prev.filter((name) => name !== item.name)
+                                : [...prev, item.name],
+                            );
+                          }
+                        }}
+                      >
+                        {item.icon}
+                        {!isCollapsed && (
+                          <>
+                            <span className="flex-1">{item.name}</span>
+                            {hasSubmenu && (
+                              <ChevronDown
+                                className={cn(
+                                  "h-4 w-4 transition-transform",
+                                  isExpanded && "transform rotate-180",
+                                )}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    {isCollapsed && (
+                      <TooltipContent side="right">
+                        <p>{item.name}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+
+                  {/* Submenu items */}
+                  {hasSubmenu && isExpanded && !isCollapsed && (
+                    <div className="ml-6 space-y-1 border-l-2 border-gray-200 pl-2">
+                      {item.submenu.map((subItem, subIndex) => {
+                        const isActive = location.pathname === subItem.path;
+                        return (
+                          <Link
+                            key={subIndex}
+                            to={subItem.path}
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
+                              isActive
+                                ? "bg-primary/10 text-primary"
+                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                            )}
+                            onClick={(e) => {
+                              // Force navigation to refresh the page if needed
+                              if (
+                                subItem.path === "/settings" &&
+                                location.pathname === "/settings"
+                              ) {
+                                e.preventDefault();
+                                window.location.href = subItem.path;
+                              }
+                            }}
+                          >
+                            {subItem.icon}
+                            <span>{subItem.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
                   )}
-                </Tooltip>
+                </div>
               );
             })}
           </TooltipProvider>

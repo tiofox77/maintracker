@@ -41,7 +41,7 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -62,7 +62,17 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const signUp = async (email: string, password: string) => {
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: email.split("@")[0],
+          last_name: "",
+          role: "user",
+        },
+      },
+    });
     if (error) throw error;
     setLoading(false);
   };

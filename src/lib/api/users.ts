@@ -34,15 +34,44 @@ export async function getUserById(id: string) {
   return data as User;
 }
 
-export async function createUser(user: UserInsert) {
+export async function createUser(
+  user: UserInsert,
+  password: string = "defaultPassword123",
+) {
+  // First create auth user
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: user.email,
+    password: password,
+    options: {
+      data: {
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+      },
+    },
+  });
+
+  if (authError) {
+    console.error("Error creating auth user:", authError);
+    throw authError;
+  }
+
+  if (!authData.user) {
+    throw new Error("Failed to create auth user");
+  }
+
+  // Then create profile in users table with the auth user ID
   const { data, error } = await supabase
     .from("users")
-    .insert(user)
+    .insert({
+      id: authData.user.id,
+      ...user,
+    })
     .select()
     .single();
 
   if (error) {
-    console.error("Error creating user:", error);
+    console.error("Error creating user profile:", error);
     throw error;
   }
 

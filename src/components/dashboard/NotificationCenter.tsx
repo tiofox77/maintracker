@@ -17,7 +17,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
-import { useMaintenanceTasks, useEquipment } from "@/lib/hooks";
+import { useMaintenanceTasks } from "@/lib/hooks";
 
 interface Notification {
   id: string;
@@ -35,9 +35,8 @@ const NotificationCenter = () => {
   const [open, setOpen] = useState(false);
 
   const { tasks } = useMaintenanceTasks();
-  const { equipment } = useEquipment();
 
-  // Generate notifications based on tasks and equipment
+  // Generate notifications based on tasks
   useEffect(() => {
     const newNotifications: Notification[] = [];
 
@@ -89,40 +88,6 @@ const NotificationCenter = () => {
       });
     });
 
-    // Check for equipment in maintenance status
-    const maintenanceEquipment = equipment.filter(
-      (equip) => equip.status === "maintenance",
-    );
-
-    maintenanceEquipment.forEach((equip) => {
-      newNotifications.push({
-        id: `maintenance-${equip.id}`,
-        title: "Equipment in Maintenance",
-        message: `${equip.name} is currently under maintenance.`,
-        type: "info",
-        timestamp: new Date(),
-        read: false,
-        relatedId: equip.id,
-      });
-    });
-
-    // Check for out-of-service equipment
-    const outOfServiceEquipment = equipment.filter(
-      (equip) => equip.status === "out-of-service",
-    );
-
-    outOfServiceEquipment.forEach((equip) => {
-      newNotifications.push({
-        id: `out-of-service-${equip.id}`,
-        title: "Equipment Out of Service",
-        message: `${equip.name} is currently out of service.`,
-        type: "error",
-        timestamp: new Date(),
-        read: false,
-        relatedId: equip.id,
-      });
-    });
-
     // Sort notifications by timestamp (newest first)
     newNotifications.sort(
       (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
@@ -132,7 +97,7 @@ const NotificationCenter = () => {
     setUnreadCount(
       newNotifications.filter((notification) => !notification.read).length,
     );
-  }, [tasks, equipment]);
+  }, [tasks]);
 
   const markAsRead = (id: string) => {
     setNotifications((prev) =>

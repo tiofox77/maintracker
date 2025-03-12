@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import DashboardHeader from "../dashboard/DashboardHeader";
 import Sidebar from "../layout/Sidebar";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent } from "../ui/card";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import {
@@ -38,18 +38,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { Edit, Plus, Search, Trash2, Loader2, UserPlus } from "lucide-react";
+import { Edit, Search, Trash2, Loader2, UserPlus } from "lucide-react";
 import { Label } from "../ui/label";
-import {
-  getUsers,
-  createUser,
-  updateUser,
-  deleteUser,
-  User,
-  UserInsert,
-  UserUpdate,
-} from "../../lib/api/users";
-import { useDepartments } from "../../lib/hooks";
+import { useUsers, useDepartments } from "../../lib/hooks";
+import { supabase } from "../../lib/supabase";
+import { User, UserInsert, UserUpdate } from "../../lib/api/users";
 import { toast } from "../../lib/utils/toast";
 
 const UserManagement = () => {
@@ -60,47 +53,28 @@ const UserManagement = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   // Form states
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<"admin" | "manager" | "technician" | "user">(
     "technician",
   );
   const [department, setDepartment] = useState("");
   const [phone, setPhone] = useState("");
 
+  // Get data from hooks
+  const { users, loading, error, addUser, editUser, removeUser } = useUsers();
   const { departments, loading: departmentsLoading } = useDepartments();
-
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const handleToggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const data = await getUsers();
-      setUsers(data);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-      toast.error("Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  // Filter users based on search and filters
+  // Filter users based on search query, role, and department
   const filteredUsers = users.filter((user) => {
     const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
     const matchesSearch =
@@ -126,6 +100,7 @@ const UserManagement = () => {
     setFirstName(user.first_name);
     setLastName(user.last_name);
     setEmail(user.email);
+    setPassword(""); // Clear password field for edit
     setRole(user.role);
     setDepartment(user.department || "");
     setPhone(user.phone || "");
@@ -140,8 +115,7 @@ const UserManagement = () => {
   const confirmDeleteUser = async () => {
     if (userToDelete) {
       try {
-        await deleteUser(userToDelete);
-        setUsers((prev) => prev.filter((user) => user.id !== userToDelete));
+        await removeUser(userToDelete);
         setDeleteDialogOpen(false);
         setUserToDelete(null);
         toast.success("User deleted successfully");
@@ -156,6 +130,7 @@ const UserManagement = () => {
     setFirstName("");
     setLastName("");
     setEmail("");
+    setPassword("");
     setRole("technician");
     setDepartment("");
     setPhone("");
@@ -178,6 +153,10 @@ const UserManagement = () => {
       toast.error("Please enter a valid email address");
       return false;
     }
+    if (!selectedUser && !password) {
+      toast.error("Password is required for new users");
+      return false;
+    }
     return true;
   };
 
@@ -197,12 +176,25 @@ const UserManagement = () => {
           department: department || null,
           phone: phone || null,
         };
-        const updatedUser = await updateUser(selectedUser.id, userUpdate);
-        setUsers((prev) =>
-          prev.map((user) =>
-            user.id === selectedUser.id ? updatedUser : user,
-          ),
-        );
+        await editUser(selectedUser.id, userUpdate);
+
+        // If password was provided, update it separately
+        if (password) {
+          try {
+            // Use updateUser API instead of admin.updateUserById which requires admin privileges
+            const { error } = await supabase.auth.updateUser({
+              password: password,
+            });
+            if (error) throw error;
+          } catch (passwordError) {
+            console.error("Error updating password:", passwordError);
+            toast.error("User updated but password change failed");
+            setModalOpen(false);
+            resetForm();
+            return;
+          }
+        }
+
         toast.success("User updated successfully");
       } else {
         // Create new user
@@ -214,8 +206,7 @@ const UserManagement = () => {
           department: department || null,
           phone: phone || null,
         };
-        const createdUser = await createUser(newUser);
-        setUsers((prev) => [...prev, createdUser]);
+        await addUser(newUser, password);
         toast.success("User added successfully");
       }
       setModalOpen(false);
@@ -445,6 +436,23 @@ const UserManagement = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">
+                    {selectedUser
+                      ? "Password (leave blank to keep current)"
+                      : "Password *"}
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder={
+                      selectedUser ? "Enter new password" : "Enter password"
+                    }
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required={!selectedUser}
                   />
                 </div>
                 <div className="space-y-2">

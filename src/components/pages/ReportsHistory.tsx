@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardHeader from "../dashboard/DashboardHeader";
 import Sidebar from "../layout/Sidebar";
 import { Button } from "../ui/button";
@@ -31,6 +31,7 @@ import {
   PieChart as PieChartIcon,
   Search,
   Sliders,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart,
@@ -38,7 +39,17 @@ import {
   LineChart,
   MetricCard,
 } from "../reports/ChartComponents";
-import { useReports } from "@/lib/hooks";
+import {
+  useReports,
+  useMaintenanceTasks,
+  useEquipment,
+  useDepartments,
+} from "@/lib/hooks";
+import { toast } from "../../lib/utils/toast";
+import {
+  CustomReportModal,
+  CustomReportConfig,
+} from "../reports/CustomReportModal";
 
 interface MaintenanceRecord {
   id: string;
@@ -48,7 +59,7 @@ interface MaintenanceRecord {
   completedDate: Date;
   duration: string;
   technician: string;
-  status: "completed" | "cancelled" | "partial";
+  status: "completed" | "cancelled" | "partial" | "scheduled" | "in-progress";
   notes?: string;
 }
 
@@ -59,98 +70,51 @@ const ReportsHistory = () => {
   const [selectedDepartment, setSelectedDepartment] = useState("all");
   const [selectedDateRange, setSelectedDateRange] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [customReportModalOpen, setCustomReportModalOpen] = useState(false);
 
-  // Mock data for maintenance history
-  const maintenanceRecords: MaintenanceRecord[] = [
-    {
-      id: "1",
-      taskTitle: "Routine Inspection",
-      equipment: "HVAC System",
-      department: "Facilities",
-      completedDate: new Date(2023, 5, 15),
-      duration: "2.5",
-      technician: "John Doe",
-      status: "completed",
-      notes: "All systems functioning normally. Replaced air filters.",
-    },
-    {
-      id: "2",
-      taskTitle: "Oil Change",
-      equipment: "CNC Machine #3",
-      department: "Manufacturing",
-      completedDate: new Date(2023, 5, 18),
-      duration: "1.5",
-      technician: "Jane Smith",
-      status: "completed",
-      notes: "Used synthetic oil as recommended by manufacturer.",
-    },
-    {
-      id: "3",
-      taskTitle: "Belt Replacement",
-      equipment: "Conveyor Belt A",
-      department: "Logistics",
-      completedDate: new Date(2023, 5, 20),
-      duration: "3",
-      technician: "Robert Johnson",
-      status: "partial",
-      notes:
-        "Replaced main belt, but tensioner needs replacement on next maintenance.",
-    },
-    {
-      id: "4",
-      taskTitle: "Cooling System Check",
-      equipment: "Server Rack B",
-      department: "IT",
-      completedDate: new Date(2023, 5, 14),
-      duration: "1",
-      technician: "Emily Brown",
-      status: "completed",
-      notes: "Cooling system operating within normal parameters.",
-    },
-    {
-      id: "5",
-      taskTitle: "Battery Replacement",
-      equipment: "Forklift #2",
-      department: "Warehouse",
-      completedDate: new Date(2023, 5, 22),
-      duration: "2",
-      technician: "John Doe",
-      status: "cancelled",
-      notes: "Cancelled due to forklift being in use for urgent shipment.",
-    },
-    {
-      id: "6",
-      taskTitle: "Software Update",
-      equipment: "Production Control System",
-      department: "Manufacturing",
-      completedDate: new Date(2023, 5, 25),
-      duration: "4",
-      technician: "Emily Brown",
-      status: "completed",
-      notes: "Updated to version 3.5.2. All modules functioning correctly.",
-    },
-    {
-      id: "7",
-      taskTitle: "Safety Inspection",
-      equipment: "Assembly Line B",
-      department: "Manufacturing",
-      completedDate: new Date(2023, 5, 28),
-      duration: "5",
-      technician: "Robert Johnson",
-      status: "completed",
-      notes:
-        "All safety systems passed inspection. Updated emergency stop buttons.",
-    },
-  ];
+  const { tasks, loading: tasksLoading } = useMaintenanceTasks();
+  const { equipment, loading: equipmentLoading } = useEquipment();
+  const [maintenanceRecords, setMaintenanceRecords] = useState<
+    MaintenanceRecord[]
+  >([]);
 
-  // Mock data for departments
-  const departments = [
-    "Manufacturing",
-    "Logistics",
-    "Facilities",
-    "IT",
-    "Warehouse",
-  ];
+  useEffect(() => {
+    if (!tasksLoading && !equipmentLoading) {
+      // Convert all tasks to maintenance records format
+      const records = tasks.map((task) => {
+        const equipmentItem = equipment.find((e) => e.id === task.equipment_id);
+        const departmentName = equipmentItem?.departments?.name || "Unknown";
+
+        return {
+          id: task.id,
+          taskTitle: task.title,
+          equipment: equipmentItem?.name || "Unknown Equipment",
+          department: departmentName,
+          completedDate: task.completed_date
+            ? new Date(task.completed_date)
+            : new Date(task.scheduled_date || Date.now()),
+          duration: task.actual_duration
+            ? task.actual_duration.toString()
+            : task.estimated_duration
+              ? task.estimated_duration.toString()
+              : "0",
+          technician: task.assigned_to || "Unassigned",
+          status: task.status as
+            | "completed"
+            | "cancelled"
+            | "partial"
+            | "scheduled"
+            | "in-progress",
+          notes: task.notes || "",
+        };
+      });
+
+      setMaintenanceRecords(records);
+    }
+  }, [tasks, equipment, tasksLoading, equipmentLoading]);
+
+  const { departments, loading: departmentsLoading } = useDepartments();
+  const departmentNames = departments.map((dept) => dept.name);
 
   const handleToggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
@@ -213,19 +177,103 @@ const ReportsHistory = () => {
             Cancelled
           </Badge>
         );
+      case "scheduled":
+        return (
+          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+            Scheduled
+          </Badge>
+        );
+      case "in-progress":
+        return (
+          <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">
+            In Progress
+          </Badge>
+        );
       default:
         return <Badge>Unknown</Badge>;
     }
   };
 
+  const { exportReport } = useReports();
+
   const handleExportData = () => {
-    // In a real application, you would generate and download a CSV/Excel file
-    console.log("Exporting maintenance history data");
+    exportReport(filteredRecords, "maintenance-history");
   };
 
-  const handleGenerateReport = (reportType: string) => {
-    // In a real application, you would generate the specified report
-    console.log(`Generating ${reportType} report`);
+  const {
+    generateMaintenanceSummary,
+    generateEquipmentPerformance,
+    generateDepartmentAnalysis,
+    generateTechnicianPerformance,
+    generateMaintenanceCalendar,
+    generateCustomReport,
+  } = useReports();
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const handleGenerateReport = async (reportType: string) => {
+    setReportLoading(true);
+    try {
+      const today = new Date();
+      const startDate = new Date();
+      startDate.setDate(today.getDate() - 90); // Last 90 days by default
+
+      const startDateStr = startDate.toISOString().split("T")[0];
+      const endDateStr = today.toISOString().split("T")[0];
+
+      let reportData;
+      switch (reportType) {
+        case "maintenance-summary":
+          reportData = await generateMaintenanceSummary(
+            startDateStr,
+            endDateStr,
+          );
+          exportReport(reportData, "maintenance-summary");
+          toast.success("Maintenance summary report generated successfully");
+          break;
+        case "equipment-performance":
+          reportData = await generateEquipmentPerformance(
+            startDateStr,
+            endDateStr,
+          );
+          exportReport(reportData, "equipment-performance");
+          toast.success("Equipment performance report generated successfully");
+          break;
+        case "department-analysis":
+          reportData = await generateDepartmentAnalysis(
+            startDateStr,
+            endDateStr,
+          );
+          exportReport(reportData, "department-analysis");
+          toast.success("Department analysis report generated successfully");
+          break;
+        case "technician-performance":
+          reportData = await generateTechnicianPerformance(
+            startDateStr,
+            endDateStr,
+          );
+          exportReport(reportData, "technician-performance");
+          toast.success("Technician performance report generated successfully");
+          break;
+        case "maintenance-calendar":
+          reportData = await generateMaintenanceCalendar(
+            startDateStr,
+            endDateStr,
+          );
+          exportReport(reportData, "maintenance-calendar");
+          toast.success("Maintenance calendar report generated successfully");
+          break;
+        case "custom":
+          setCustomReportModalOpen(true);
+          break;
+        default:
+          toast.info("Report generation will be available in a future update");
+      }
+    } catch (error) {
+      console.error("Error generating report:", error);
+      toast.error("Failed to generate report");
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   return (
@@ -289,7 +337,7 @@ const ReportsHistory = () => {
                               <SelectItem value="all">
                                 All Departments
                               </SelectItem>
-                              {departments.map((department) => (
+                              {departmentNames.map((department) => (
                                 <SelectItem key={department} value={department}>
                                   {department}
                                 </SelectItem>
@@ -325,6 +373,12 @@ const ReportsHistory = () => {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">All Statuses</SelectItem>
+                              <SelectItem value="scheduled">
+                                Scheduled
+                              </SelectItem>
+                              <SelectItem value="in-progress">
+                                In Progress
+                              </SelectItem>
                               <SelectItem value="completed">
                                 Completed
                               </SelectItem>
@@ -352,7 +406,19 @@ const ReportsHistory = () => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredRecords.length > 0 ? (
+                            {tasksLoading || equipmentLoading ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={7}
+                                  className="text-center py-10"
+                                >
+                                  <div className="flex justify-center items-center">
+                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                    <span>Loading maintenance history...</span>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : filteredRecords.length > 0 ? (
                               filteredRecords.map((record) => (
                                 <TableRow key={record.id}>
                                   <TableCell className="font-medium">
@@ -402,7 +468,13 @@ const ReportsHistory = () => {
                     </p>
                   </div>
                   <div className="flex gap-4">
-                    <Select defaultValue="last30days">
+                    <Select
+                      defaultValue="last30days"
+                      onValueChange={(value) => {
+                        // This would filter data based on the selected date range
+                        console.log(`Selected date range: ${value}`);
+                      }}
+                    >
                       <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder="Select date range" />
                       </SelectTrigger>
@@ -413,75 +485,293 @@ const ReportsHistory = () => {
                         <SelectItem value="thisyear">This year</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button variant="outline">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        // Export all reports data
+                        const allReportsData = {
+                          tasks: tasks,
+                          equipment: equipment,
+                          metrics: {
+                            totalTasks: tasks.length,
+                            completedTasks: tasks.filter(
+                              (t) => t.status === "completed",
+                            ).length,
+                            completionRate:
+                              tasks.length > 0
+                                ? (tasks.filter((t) => t.status === "completed")
+                                    .length /
+                                    tasks.length) *
+                                  100
+                                : 0,
+                            avgResolutionTime:
+                              tasks.filter((t) => t.actual_duration).length > 0
+                                ? tasks
+                                    .filter((t) => t.actual_duration)
+                                    .reduce(
+                                      (sum, t) =>
+                                        sum + (t.actual_duration || 0),
+                                      0,
+                                    ) /
+                                  tasks.filter((t) => t.actual_duration).length
+                                : 0,
+                          },
+                        };
+                        exportReport(allReportsData, "all-reports-data");
+                      }}
+                    >
                       <Download className="mr-2 h-4 w-4" /> Export All
                     </Button>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <MetricCard
-                    title="Total Tasks"
-                    value={128}
-                    trend="up"
-                    trendValue="+12% from last month"
-                    icon={<FileText className="h-5 w-5" />}
-                  />
-                  <MetricCard
-                    title="Completion Rate"
-                    value="87%"
-                    trend="up"
-                    trendValue="+5% from last month"
-                    icon={<BarChart3 className="h-5 w-5" />}
-                  />
-                  <MetricCard
-                    title="Avg. Resolution Time"
-                    value="2.4 days"
-                    trend="down"
-                    trendValue="-0.5 days from last month"
-                    icon={<Calendar className="h-5 w-5" />}
-                  />
+                  {tasksLoading ? (
+                    <>
+                      {[1, 2, 3].map((i) => (
+                        <Card key={i} className="p-6">
+                          <div className="animate-pulse flex space-x-4">
+                            <div className="rounded-full bg-gray-200 h-10 w-10"></div>
+                            <div className="flex-1 space-y-4 py-1">
+                              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <MetricCard
+                        title="Total Tasks"
+                        value={tasks.length}
+                        trend={tasks.length > 0 ? "up" : "neutral"}
+                        trendValue={`${tasks.filter((t) => t.status === "completed").length} completed`}
+                        icon={<FileText className="h-5 w-5" />}
+                      />
+                      <MetricCard
+                        title="Completion Rate"
+                        value={`${tasks.length > 0 ? Math.round((tasks.filter((t) => t.status === "completed").length / tasks.length) * 100) : 0}%`}
+                        trend={
+                          tasks.filter((t) => t.status === "completed").length >
+                          tasks.filter((t) => t.status === "cancelled").length
+                            ? "up"
+                            : "down"
+                        }
+                        trendValue={`${tasks.filter((t) => t.status === "cancelled").length} cancelled`}
+                        icon={<BarChart3 className="h-5 w-5" />}
+                      />
+                      <MetricCard
+                        title="Avg. Resolution Time"
+                        value={`${tasks.filter((t) => t.actual_duration).length > 0 ? (tasks.filter((t) => t.actual_duration).reduce((sum, t) => sum + (t.actual_duration || 0), 0) / tasks.filter((t) => t.actual_duration).length).toFixed(1) : 0} hrs`}
+                        trend="neutral"
+                        trendValue={`${tasks.filter((t) => t.actual_duration).length} tasks measured`}
+                        icon={<Calendar className="h-5 w-5" />}
+                      />
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <BarChart
-                    title="Maintenance Tasks by Status"
-                    data={[
-                      { label: "Completed", value: 89, color: "bg-green-500" },
-                      {
-                        label: "In Progress",
-                        value: 32,
-                        color: "bg-yellow-500",
-                      },
-                      { label: "Scheduled", value: 42, color: "bg-blue-500" },
-                      { label: "Cancelled", value: 12, color: "bg-red-500" },
-                      { label: "Partial", value: 7, color: "bg-purple-500" },
-                    ]}
-                  />
-                  <PieChart
-                    title="Tasks by Priority"
-                    data={[
-                      { label: "Critical", value: 15, color: "#ef4444" },
-                      { label: "High", value: 28, color: "#f97316" },
-                      { label: "Medium", value: 45, color: "#3b82f6" },
-                      { label: "Low", value: 40, color: "#22c55e" },
-                    ]}
-                  />
+                  {tasksLoading ? (
+                    <>
+                      {[1, 2].map((i) => (
+                        <Card key={i} className="p-6 h-[300px]">
+                          <div className="animate-pulse space-y-4">
+                            <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                            <div className="h-[250px] bg-gray-100 rounded"></div>
+                          </div>
+                        </Card>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-lg">
+                            Maintenance Tasks by Status
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-[300px] flex items-center justify-center">
+                            <table className="w-full">
+                              <thead>
+                                <tr>
+                                  <th className="text-left pb-2">Status</th>
+                                  <th className="text-left pb-2">Count</th>
+                                  <th className="text-left pb-2">Bar</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {[
+                                  {
+                                    label: "Completed",
+                                    value: tasks.filter(
+                                      (t) => t.status === "completed",
+                                    ).length,
+                                    color: "bg-green-500",
+                                  },
+                                  {
+                                    label: "In Progress",
+                                    value: tasks.filter(
+                                      (t) => t.status === "in-progress",
+                                    ).length,
+                                    color: "bg-yellow-500",
+                                  },
+                                  {
+                                    label: "Scheduled",
+                                    value: tasks.filter(
+                                      (t) => t.status === "scheduled",
+                                    ).length,
+                                    color: "bg-blue-500",
+                                  },
+                                  {
+                                    label: "Cancelled",
+                                    value: tasks.filter(
+                                      (t) => t.status === "cancelled",
+                                    ).length,
+                                    color: "bg-red-500",
+                                  },
+                                  {
+                                    label: "Partial",
+                                    value: tasks.filter(
+                                      (t) => t.status === "partial",
+                                    ).length,
+                                    color: "bg-purple-500",
+                                  },
+                                ].map((item, index) => {
+                                  const maxValue = Math.max(
+                                    tasks.filter(
+                                      (t) => t.status === "completed",
+                                    ).length,
+                                    tasks.filter(
+                                      (t) => t.status === "in-progress",
+                                    ).length,
+                                    tasks.filter(
+                                      (t) => t.status === "scheduled",
+                                    ).length,
+                                    tasks.filter(
+                                      (t) => t.status === "cancelled",
+                                    ).length,
+                                    tasks.filter((t) => t.status === "partial")
+                                      .length,
+                                    1,
+                                  );
+                                  const percentage =
+                                    (item.value / maxValue) * 100;
+
+                                  return (
+                                    <tr key={index} className="h-12">
+                                      <td className="font-medium">
+                                        {item.label}
+                                      </td>
+                                      <td>{item.value}</td>
+                                      <td className="w-1/2">
+                                        <div className="h-6 w-full bg-gray-100 rounded-full overflow-hidden">
+                                          <div
+                                            className={`h-full ${item.color} rounded-full`}
+                                            style={{
+                                              width: `${Math.max(percentage, 2)}%`,
+                                            }}
+                                          ></div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <PieChart
+                        title="Tasks by Priority"
+                        data={[
+                          {
+                            label: "Critical",
+                            value: tasks.filter(
+                              (t) => t.priority === "critical",
+                            ).length,
+                            color: "#ef4444",
+                          },
+                          {
+                            label: "High",
+                            value: tasks.filter((t) => t.priority === "high")
+                              .length,
+                            color: "#f97316",
+                          },
+                          {
+                            label: "Medium",
+                            value: tasks.filter((t) => t.priority === "medium")
+                              .length,
+                            color: "#3b82f6",
+                          },
+                          {
+                            label: "Low",
+                            value: tasks.filter((t) => t.priority === "low")
+                              .length,
+                            color: "#22c55e",
+                          },
+                        ]}
+                      />
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 mb-6">
-                  <LineChart
-                    title="Maintenance Tasks Over Time"
-                    data={[
-                      { label: "Jan", value: 42 },
-                      { label: "Feb", value: 38 },
-                      { label: "Mar", value: 55 },
-                      { label: "Apr", value: 47 },
-                      { label: "May", value: 60 },
-                      { label: "Jun", value: 55 },
-                      { label: "Jul", value: 70 },
-                    ]}
-                  />
+                  {tasksLoading ? (
+                    <Card className="p-6 h-[300px]">
+                      <div className="animate-pulse space-y-4">
+                        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                        <div className="h-[250px] bg-gray-100 rounded"></div>
+                      </div>
+                    </Card>
+                  ) : (
+                    <LineChart
+                      title="Maintenance Tasks Over Time"
+                      data={(() => {
+                        // Group tasks by month
+                        const monthlyTasks = {};
+                        const months = [
+                          "Jan",
+                          "Feb",
+                          "Mar",
+                          "Apr",
+                          "May",
+                          "Jun",
+                          "Jul",
+                          "Aug",
+                          "Sep",
+                          "Oct",
+                          "Nov",
+                          "Dec",
+                        ];
+
+                        tasks.forEach((task) => {
+                          if (task.scheduled_date) {
+                            const date = new Date(task.scheduled_date);
+                            const month = date.getMonth();
+                            monthlyTasks[month] =
+                              (monthlyTasks[month] || 0) + 1;
+                          }
+                        });
+
+                        // Create data array for the last 6 months
+                        const currentMonth = new Date().getMonth();
+                        const data = [];
+
+                        for (let i = 5; i >= 0; i--) {
+                          const monthIndex = (currentMonth - i + 12) % 12; // Handle wrapping around to previous year
+                          data.push({
+                            label: months[monthIndex],
+                            value: monthlyTasks[monthIndex] || 0,
+                          });
+                        }
+
+                        return data;
+                      })()}
+                    />
+                  )}
                 </div>
 
                 <h3 className="text-xl font-semibold mb-4">Report Templates</h3>
@@ -504,8 +794,16 @@ const ReportsHistory = () => {
                         onClick={() =>
                           handleGenerateReport("maintenance-summary")
                         }
+                        disabled={reportLoading}
                       >
-                        Generate Report
+                        {reportLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating...
+                          </>
+                        ) : (
+                          "Generate Report"
+                        )}
                       </Button>
                     </CardContent>
                   </Card>
@@ -528,8 +826,16 @@ const ReportsHistory = () => {
                         onClick={() =>
                           handleGenerateReport("equipment-performance")
                         }
+                        disabled={reportLoading}
                       >
-                        Generate Report
+                        {reportLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating...
+                          </>
+                        ) : (
+                          "Generate Report"
+                        )}
                       </Button>
                     </CardContent>
                   </Card>
@@ -552,8 +858,16 @@ const ReportsHistory = () => {
                         onClick={() =>
                           handleGenerateReport("department-analysis")
                         }
+                        disabled={reportLoading}
                       >
-                        Generate Report
+                        {reportLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating...
+                          </>
+                        ) : (
+                          "Generate Report"
+                        )}
                       </Button>
                     </CardContent>
                   </Card>
@@ -576,8 +890,16 @@ const ReportsHistory = () => {
                         onClick={() =>
                           handleGenerateReport("technician-performance")
                         }
+                        disabled={reportLoading}
                       >
-                        Generate Report
+                        {reportLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating...
+                          </>
+                        ) : (
+                          "Generate Report"
+                        )}
                       </Button>
                     </CardContent>
                   </Card>
@@ -600,8 +922,16 @@ const ReportsHistory = () => {
                         onClick={() =>
                           handleGenerateReport("maintenance-calendar")
                         }
+                        disabled={reportLoading}
                       >
-                        Generate Report
+                        {reportLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating...
+                          </>
+                        ) : (
+                          "Generate Report"
+                        )}
                       </Button>
                     </CardContent>
                   </Card>
@@ -622,8 +952,16 @@ const ReportsHistory = () => {
                       <Button
                         className="w-full"
                         onClick={() => handleGenerateReport("custom")}
+                        disabled={reportLoading}
                       >
-                        Create Custom Report
+                        {reportLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Generating...
+                          </>
+                        ) : (
+                          "Create Custom Report"
+                        )}
                       </Button>
                     </CardContent>
                   </Card>
@@ -633,6 +971,27 @@ const ReportsHistory = () => {
           </div>
         </div>
       </div>
+
+      {/* Custom Report Modal */}
+      <CustomReportModal
+        open={customReportModalOpen}
+        onOpenChange={setCustomReportModalOpen}
+        loading={reportLoading}
+        onGenerateReport={async (config: CustomReportConfig) => {
+          try {
+            setReportLoading(true);
+            const reportData = await generateCustomReport(config);
+            exportReport(reportData, `custom-report-${config.reportType}`);
+            setCustomReportModalOpen(false);
+            toast.success("Custom report generated successfully");
+          } catch (error) {
+            console.error("Error generating custom report:", error);
+            toast.error("Failed to generate custom report");
+          } finally {
+            setReportLoading(false);
+          }
+        }}
+      />
     </div>
   );
 };

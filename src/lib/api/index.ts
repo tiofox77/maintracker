@@ -6,3 +6,7 @@ export * from "./maintenance";
 export * from "./users";
 export * from "./settings";
 export * from "./reports";
+export * from "./supplyChain/materialRequests";
+export * from "./supplyChain/departments";
+export * from "./supplyChain/proformaInvoices";
+export * from "./documentFiles";

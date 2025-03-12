@@ -5,8 +5,13 @@ import "./index.css";
 import { BrowserRouter } from "react-router-dom";
 import { SupabaseProvider } from "./components/context/SupabaseProvider";
 
-import { TempoDevtools } from "tempo-devtools";
-TempoDevtools.init();
+// Initialize Tempo Devtools with error handling
+try {
+  const { TempoDevtools } = require("tempo-devtools");
+  TempoDevtools.init();
+} catch (error) {
+  console.warn("Failed to initialize Tempo Devtools:", error);
+}
 
 const basename = import.meta.env.BASE_URL;
 

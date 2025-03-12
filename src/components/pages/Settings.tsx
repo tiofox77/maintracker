@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardHeader from "../dashboard/DashboardHeader";
 import Sidebar from "../layout/Sidebar";
 import { Button } from "../ui/button";
@@ -28,6 +28,7 @@ import {
   Database,
   Key,
   Lock,
+  Loader2,
   PlusCircle,
   Save,
   Shield,
@@ -35,51 +36,219 @@ import {
   Users,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
+import { useSettings } from "@/lib/hooks/useSettings";
+import { toast } from "@/lib/utils/toast";
 
 const Settings = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
 
-  // Mock settings state
+  // Get settings from hook
+  const {
+    settings,
+    userProfile,
+    loading,
+    error,
+    updateGeneralSettings,
+    updateNotificationSettings,
+    updateUserProfile,
+    updatePassword,
+    updateTwoFactorAuth,
+    signOutAllOtherSessions,
+  } = useSettings();
+
+  // Form states
   const [generalSettings, setGeneralSettings] = useState({
-    companyName: "Acme Manufacturing",
-    systemName: "Maintenance Management System",
-    dateFormat: "MM/DD/YYYY",
-    timeFormat: "12h",
-    defaultLanguage: "en",
-    timezone: "UTC-5",
+    companyName: "",
+    systemName: "",
+    dateFormat: "",
+    timeFormat: "",
+    defaultLanguage: "",
+    timezone: "",
   });
 
   const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    maintenanceDueReminders: true,
-    equipmentStatusChanges: true,
+    emailNotifications: false,
+    maintenanceDueReminders: false,
+    equipmentStatusChanges: false,
     systemUpdates: false,
-    dailyDigest: true,
+    dailyDigest: false,
     reminderDays: "3",
   });
 
   const [userSettings, setUserSettings] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@acme.com",
-    role: "admin",
-    department: "Maintenance",
-    phone: "(555) 123-4567",
+    firstName: "",
+    lastName: "",
+    email: "",
+    role: "",
+    department: "",
+    phone: "",
   });
+
+  const [passwordSettings, setPasswordSettings] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Initialize form values from settings when they load
+  useEffect(() => {
+    if (settings) {
+      setGeneralSettings({
+        companyName: settings.company_name || "Acme Manufacturing",
+        systemName: settings.system_name || "Maintenance Management System",
+        dateFormat: settings.date_format || "MM/DD/YYYY",
+        timeFormat: settings.time_format || "12h",
+        defaultLanguage: settings.default_language || "en",
+        timezone: settings.timezone || "UTC-5",
+      });
+
+      setNotificationSettings({
+        emailNotifications: settings.email_notifications || false,
+        maintenanceDueReminders: settings.maintenance_due_reminders || false,
+        equipmentStatusChanges: settings.equipment_status_changes || false,
+        systemUpdates: settings.system_updates || false,
+        dailyDigest: settings.daily_digest || false,
+        reminderDays: settings.reminder_days?.toString() || "3",
+      });
+    }
+
+    if (userProfile) {
+      setUserSettings({
+        firstName: userProfile.first_name || "",
+        lastName: userProfile.last_name || "",
+        email: userProfile.email || "",
+        role: userProfile.role || "user",
+        department: userProfile.department || "",
+        phone: userProfile.phone || "",
+      });
+    }
+  }, [settings, userProfile]);
 
   const handleToggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  const handleSaveSettings = (settingType: string) => {
-    // In a real application, you would save the settings to a database or API
-    console.log(`Saving ${settingType} settings`);
+  const handleSaveGeneralSettings = async () => {
+    try {
+      setSubmitting(true);
+      await updateGeneralSettings({
+        company_name: generalSettings.companyName,
+        system_name: generalSettings.systemName,
+        date_format: generalSettings.dateFormat,
+        time_format: generalSettings.timeFormat,
+        default_language: generalSettings.defaultLanguage,
+        timezone: generalSettings.timezone,
+      });
+    } catch (error) {
+      console.error("Error saving general settings:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    // Show success message
-    alert(
-      `${settingType.charAt(0).toUpperCase() + settingType.slice(1)} settings saved successfully!`,
-    );
+  const handleSaveNotificationSettings = async () => {
+    try {
+      setSubmitting(true);
+      await updateNotificationSettings({
+        email_notifications: notificationSettings.emailNotifications,
+        maintenance_due_reminders: notificationSettings.maintenanceDueReminders,
+        equipment_status_changes: notificationSettings.equipmentStatusChanges,
+        system_updates: notificationSettings.systemUpdates,
+        daily_digest: notificationSettings.dailyDigest,
+        reminder_days: parseInt(notificationSettings.reminderDays),
+      });
+    } catch (error) {
+      console.error("Error saving notification settings:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveUserProfile = async () => {
+    try {
+      setSubmitting(true);
+      await updateUserProfile({
+        first_name: userSettings.firstName,
+        last_name: userSettings.lastName,
+        email: userSettings.email,
+        role: userSettings.role,
+        department: userSettings.department,
+        phone: userSettings.phone,
+      });
+    } catch (error) {
+      console.error("Error saving user profile:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    try {
+      // Validate passwords
+      if (!passwordSettings.currentPassword) {
+        toast.error("Current password is required");
+        return;
+      }
+
+      if (!passwordSettings.newPassword) {
+        toast.error("New password is required");
+        return;
+      }
+
+      if (passwordSettings.newPassword !== passwordSettings.confirmPassword) {
+        toast.error("New passwords do not match");
+        return;
+      }
+
+      if (passwordSettings.newPassword.length < 8) {
+        toast.error("New password must be at least 8 characters");
+        return;
+      }
+
+      setSubmitting(true);
+      await updatePassword(
+        passwordSettings.currentPassword,
+        passwordSettings.newPassword,
+      );
+
+      // Clear password fields after successful update
+      setPasswordSettings({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (error) {
+      console.error("Error updating password:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleTwoFactor = async (enabled: boolean) => {
+    try {
+      setSubmitting(true);
+      await updateTwoFactorAuth(enabled);
+      setTwoFactorEnabled(enabled);
+    } catch (error) {
+      console.error("Error updating two-factor authentication:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSignOutAllOtherSessions = async () => {
+    try {
+      setSubmitting(true);
+      await signOutAllOtherSessions();
+    } catch (error) {
+      console.error("Error signing out other sessions:", error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -158,6 +327,7 @@ const Settings = () => {
                                 companyName: e.target.value,
                               })
                             }
+                            disabled={loading || submitting}
                           />
                         </div>
                         <div className="space-y-2">
@@ -286,10 +456,20 @@ const Settings = () => {
                       <div className="flex justify-end">
                         <Button
                           type="button"
-                          onClick={() => handleSaveSettings("general")}
+                          onClick={handleSaveGeneralSettings}
+                          disabled={loading || submitting}
                         >
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Changes
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2 h-4 w-4" />
+                              Save Changes
+                            </>
+                          )}
                         </Button>
                       </div>
                     </form>
@@ -327,6 +507,7 @@ const Settings = () => {
                                 emailNotifications: checked,
                               })
                             }
+                            disabled={loading || submitting}
                           />
                         </div>
                         <Separator />
@@ -446,10 +627,20 @@ const Settings = () => {
                       <div className="flex justify-end">
                         <Button
                           type="button"
-                          onClick={() => handleSaveSettings("notifications")}
+                          onClick={handleSaveNotificationSettings}
+                          disabled={loading || submitting}
                         >
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Changes
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2 h-4 w-4" />
+                              Save Changes
+                            </>
+                          )}
                         </Button>
                       </div>
                     </form>
@@ -503,6 +694,7 @@ const Settings = () => {
                                 firstName: e.target.value,
                               })
                             }
+                            disabled={loading || submitting}
                           />
                         </div>
                         <div className="space-y-2">
@@ -607,10 +799,20 @@ const Settings = () => {
                       <div className="flex justify-end">
                         <Button
                           type="button"
-                          onClick={() => handleSaveSettings("user")}
+                          onClick={handleSaveUserProfile}
+                          disabled={loading || submitting}
                         >
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Changes
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2 h-4 w-4" />
+                              Save Changes
+                            </>
+                          )}
                         </Button>
                       </div>
                     </form>
@@ -636,28 +838,68 @@ const Settings = () => {
                             <Label htmlFor="current-password">
                               Current Password
                             </Label>
-                            <Input id="current-password" type="password" />
+                            <Input
+                              id="current-password"
+                              type="password"
+                              value={passwordSettings.currentPassword}
+                              onChange={(e) =>
+                                setPasswordSettings({
+                                  ...passwordSettings,
+                                  currentPassword: e.target.value,
+                                })
+                              }
+                              disabled={loading || submitting}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="new-password">New Password</Label>
-                            <Input id="new-password" type="password" />
+                            <Input
+                              id="new-password"
+                              type="password"
+                              value={passwordSettings.newPassword}
+                              onChange={(e) =>
+                                setPasswordSettings({
+                                  ...passwordSettings,
+                                  newPassword: e.target.value,
+                                })
+                              }
+                              disabled={loading || submitting}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="confirm-password">
                               Confirm New Password
                             </Label>
-                            <Input id="confirm-password" type="password" />
+                            <Input
+                              id="confirm-password"
+                              type="password"
+                              value={passwordSettings.confirmPassword}
+                              onChange={(e) =>
+                                setPasswordSettings({
+                                  ...passwordSettings,
+                                  confirmPassword: e.target.value,
+                                })
+                              }
+                              disabled={loading || submitting}
+                            />
                           </div>
                         </div>
                         <Button
                           className="mt-2"
-                          onClick={() => {
-                            console.log("Password update requested");
-                            alert("Password updated successfully!");
-                          }}
+                          onClick={handleUpdatePassword}
+                          disabled={loading || submitting}
                         >
-                          <Key className="mr-2 h-4 w-4" />
-                          Update Password
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Updating...
+                            </>
+                          ) : (
+                            <>
+                              <Key className="mr-2 h-4 w-4" />
+                              Update Password
+                            </>
+                          )}
                         </Button>
                       </div>
 
@@ -682,14 +924,9 @@ const Settings = () => {
                           </div>
                           <Switch
                             id="two-factor"
-                            onCheckedChange={(checked) => {
-                              console.log(
-                                `Two-factor authentication ${checked ? "enabled" : "disabled"}`,
-                              );
-                              alert(
-                                `Two-factor authentication ${checked ? "enabled" : "disabled"} successfully!`,
-                              );
-                            }}
+                            checked={twoFactorEnabled}
+                            onCheckedChange={handleToggleTwoFactor}
+                            disabled={loading || submitting}
                           />
                         </div>
                         <Button
@@ -731,17 +968,20 @@ const Settings = () => {
                         </div>
                         <Button
                           variant="outline"
-                          onClick={() => {
-                            console.log(
-                              "Sign out all other sessions requested",
-                            );
-                            alert(
-                              "All other sessions have been signed out successfully!",
-                            );
-                          }}
+                          onClick={handleSignOutAllOtherSessions}
+                          disabled={loading || submitting}
                         >
-                          <AlertTriangle className="mr-2 h-4 w-4" />
-                          Sign Out All Other Sessions
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="mr-2 h-4 w-4" />
+                              Sign Out All Other Sessions
+                            </>
+                          )}
                         </Button>
                       </div>
 

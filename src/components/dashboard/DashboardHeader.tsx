@@ -68,7 +68,9 @@ const DashboardHeader = ({
           </Avatar>
           <div className="hidden md:block">
             <p className="text-sm font-medium">
-              {user?.email?.split("@")[0] || "User"}
+              {user?.user_metadata?.first_name ||
+                user?.email?.split("@")[0] ||
+                "User"}
             </p>
             <p className="text-xs text-gray-500">Maintenance Manager</p>
           </div>
