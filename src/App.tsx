@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Home from "./components/home";
 import MaintenanceScheduling from "./components/pages/MaintenanceScheduling";
@@ -12,6 +12,7 @@ import LoginForm from "./components/auth/LoginForm";
 import { useSupabase } from "./components/context/SupabaseProvider";
 import TaskManagement from "./components/pages/TaskManagement";
 import TaskBasedMaintenance from "./components/pages/TaskBasedMaintenance";
+import TaskCorrective from "./components/pages/TaskCorrective";
 
 // Supply Chain Routes
 import MaterialRequests from "./components/pages/supplyChain/MaterialRequests";
@@ -55,6 +56,7 @@ function App() {
               path="/task-maintenance"
               element={<TaskBasedMaintenance />}
             />
+            <Route path="/task-corrective" element={<TaskCorrective />} />
             <Route path="/reports" element={<ReportsHistory />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/users" element={<UserManagement />} />

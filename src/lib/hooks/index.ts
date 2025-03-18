@@ -15,3 +15,4 @@ export * from "./useDocumentFiles";
 export * from "./useTasks";
 export * from "./useCategories";
 export * from "./useDepartments";
+export * from "./useTaskMaintenance";

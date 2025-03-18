@@ -78,6 +78,11 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
           icon: <Wrench className="h-5 w-5" />,
         },
         {
+          name: "Corrective Maintenance",
+          path: "/task-corrective",
+          icon: <Wrench className="h-5 w-5" />,
+        },
+        {
           name: "Reports & History",
           path: "/reports",
           icon: <BarChart3 className="h-5 w-5" />,
