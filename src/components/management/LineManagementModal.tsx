@@ -10,55 +10,50 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { useCategories } from "../../lib/hooks";
-import {
-  Category,
-  CategoryInsert,
-  CategoryUpdate,
-  getCategoryById,
-} from "../../lib/api/categories";
+import { useLines } from "../../lib/hooks";
+import { Line, LineInsert, LineUpdate, getLineById } from "../../lib/api/lines";
 import { toast } from "../../lib/utils/toast";
 
-interface CategoryManagementModalProps {
+interface LineManagementModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  categoryId?: string | null;
+  lineId?: string | null;
 }
 
-export const CategoryManagementModal = ({
+export const LineManagementModal = ({
   open,
   onOpenChange,
-  categoryId = null,
-}: CategoryManagementModalProps) => {
+  lineId = null,
+}: LineManagementModalProps) => {
   // Form states
-  const [categoryName, setCategoryName] = useState("");
-  const [categoryDescription, setCategoryDescription] = useState("");
+  const [lineName, setLineName] = useState("");
+  const [lineDescription, setLineDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Get data from hooks
-  const { addCategory, editCategory } = useCategories();
+  const { addLine, editLine } = useLines();
 
-  // Fetch category data if editing
+  // Fetch line data if editing
   useEffect(() => {
-    const fetchCategoryData = async () => {
-      if (categoryId && open) {
+    const fetchLineData = async () => {
+      if (lineId && open) {
         try {
           setLoading(true);
-          const category = await getCategoryById(categoryId);
+          const line = await getLineById(lineId);
 
-          setCategoryName(category.name);
-          setCategoryDescription(category.description || "");
+          setLineName(line.name);
+          setLineDescription(line.description || "");
         } catch (error) {
-          console.error("Error fetching category:", error);
-          toast.error("Failed to load category details");
+          console.error("Error fetching line:", error);
+          toast.error("Failed to load line details");
         } finally {
           setLoading(false);
         }
       }
     };
 
-    fetchCategoryData();
-  }, [categoryId, open]);
+    fetchLineData();
+  }, [lineId, open]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -68,13 +63,13 @@ export const CategoryManagementModal = ({
   }, [open]);
 
   const resetForm = () => {
-    setCategoryName("");
-    setCategoryDescription("");
+    setLineName("");
+    setLineDescription("");
   };
 
   const validateForm = () => {
-    if (!categoryName) {
-      toast.error("Category name is required");
+    if (!lineName) {
+      toast.error("Line name is required");
       return false;
     }
     return true;
@@ -88,28 +83,28 @@ export const CategoryManagementModal = ({
     try {
       setLoading(true);
 
-      if (categoryId) {
-        // Update existing category
-        const categoryUpdate: CategoryUpdate = {
-          name: categoryName,
-          description: categoryDescription || null,
+      if (lineId) {
+        // Update existing line
+        const lineUpdate: LineUpdate = {
+          name: lineName,
+          description: lineDescription || null,
         };
-        await editCategory(categoryId, categoryUpdate);
-        toast.success("Category updated successfully");
+        await editLine(lineId, lineUpdate);
+        toast.success("Line updated successfully");
       } else {
-        // Create new category
-        const newCategory: CategoryInsert = {
-          name: categoryName,
-          description: categoryDescription || null,
+        // Create new line
+        const newLine: LineInsert = {
+          name: lineName,
+          description: lineDescription || null,
         };
-        await addCategory(newCategory);
-        toast.success("Category added successfully");
+        await addLine(newLine);
+        toast.success("Line added successfully");
       }
 
       onOpenChange(false);
     } catch (error) {
-      console.error("Error saving category:", error);
-      toast.error("Failed to save category");
+      console.error("Error saving line:", error);
+      toast.error("Failed to save line");
     } finally {
       setLoading(false);
     }
@@ -119,11 +114,11 @@ export const CategoryManagementModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{categoryId ? "Edit Area" : "Add New Area"}</DialogTitle>
+          <DialogTitle>{lineId ? "Edit Line" : "Add New Line"}</DialogTitle>
           <DialogDescription>
-            {categoryId
-              ? "Update the area details below."
-              : "Fill in the details to create a new area."}
+            {lineId
+              ? "Update the line details below."
+              : "Fill in the details to create a new line."}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,24 +130,24 @@ export const CategoryManagementModal = ({
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="category-name">Area Name *</Label>
+                <Label htmlFor="line-name">Line Name *</Label>
                 <Input
-                  id="category-name"
-                  placeholder="Enter area name"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
+                  id="line-name"
+                  placeholder="Enter line name"
+                  value={lineName}
+                  onChange={(e) => setLineName(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="category-description">Description</Label>
+                <Label htmlFor="line-description">Description</Label>
                 <textarea
-                  id="category-description"
+                  id="line-description"
                   rows={3}
                   className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                  placeholder="Enter area description"
-                  value={categoryDescription}
-                  onChange={(e) => setCategoryDescription(e.target.value)}
+                  placeholder="Enter line description"
+                  value={lineDescription}
+                  onChange={(e) => setLineDescription(e.target.value)}
                 />
               </div>
               <div className="text-sm text-gray-500">* Required fields</div>
@@ -172,10 +167,10 @@ export const CategoryManagementModal = ({
                     <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                     Saving...
                   </>
-                ) : categoryId ? (
-                  "Update Area"
+                ) : lineId ? (
+                  "Update Line"
                 ) : (
-                  "Add Area"
+                  "Add Line"
                 )}
               </Button>
             </DialogFooter>

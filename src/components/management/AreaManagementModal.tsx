@@ -10,55 +10,52 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { useCategories } from "../../lib/hooks";
-import {
-  Category,
-  CategoryInsert,
-  CategoryUpdate,
-  getCategoryById,
-} from "../../lib/api/categories";
+import { useAreas } from "../../lib/hooks";
+import { Area, AreaInsert, AreaUpdate, getAreaById } from "../../lib/api/areas";
 import { toast } from "../../lib/utils/toast";
 
-interface CategoryManagementModalProps {
+interface AreaManagementModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  categoryId?: string | null;
+  areaId?: string | null;
 }
 
-export const CategoryManagementModal = ({
+export const AreaManagementModal = ({
   open,
   onOpenChange,
-  categoryId = null,
-}: CategoryManagementModalProps) => {
+  areaId = null,
+}: AreaManagementModalProps) => {
   // Form states
-  const [categoryName, setCategoryName] = useState("");
-  const [categoryDescription, setCategoryDescription] = useState("");
+  const [areaName, setAreaName] = useState("");
+  const [areaDescription, setAreaDescription] = useState("");
+  const [areaLocation, setAreaLocation] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Get data from hooks
-  const { addCategory, editCategory } = useCategories();
+  const { addArea, editArea } = useAreas();
 
-  // Fetch category data if editing
+  // Fetch area data if editing
   useEffect(() => {
-    const fetchCategoryData = async () => {
-      if (categoryId && open) {
+    const fetchAreaData = async () => {
+      if (areaId && open) {
         try {
           setLoading(true);
-          const category = await getCategoryById(categoryId);
+          const area = await getAreaById(areaId);
 
-          setCategoryName(category.name);
-          setCategoryDescription(category.description || "");
+          setAreaName(area.name);
+          setAreaDescription(area.description || "");
+          setAreaLocation(area.location || "");
         } catch (error) {
-          console.error("Error fetching category:", error);
-          toast.error("Failed to load category details");
+          console.error("Error fetching area:", error);
+          toast.error("Failed to load area details");
         } finally {
           setLoading(false);
         }
       }
     };
 
-    fetchCategoryData();
-  }, [categoryId, open]);
+    fetchAreaData();
+  }, [areaId, open]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -68,13 +65,14 @@ export const CategoryManagementModal = ({
   }, [open]);
 
   const resetForm = () => {
-    setCategoryName("");
-    setCategoryDescription("");
+    setAreaName("");
+    setAreaDescription("");
+    setAreaLocation("");
   };
 
   const validateForm = () => {
-    if (!categoryName) {
-      toast.error("Category name is required");
+    if (!areaName) {
+      toast.error("Area name is required");
       return false;
     }
     return true;
@@ -88,28 +86,30 @@ export const CategoryManagementModal = ({
     try {
       setLoading(true);
 
-      if (categoryId) {
-        // Update existing category
-        const categoryUpdate: CategoryUpdate = {
-          name: categoryName,
-          description: categoryDescription || null,
+      if (areaId) {
+        // Update existing area
+        const areaUpdate: AreaUpdate = {
+          name: areaName,
+          description: areaDescription || null,
+          location: areaLocation || null,
         };
-        await editCategory(categoryId, categoryUpdate);
-        toast.success("Category updated successfully");
+        await editArea(areaId, areaUpdate);
+        toast.success("Area updated successfully");
       } else {
-        // Create new category
-        const newCategory: CategoryInsert = {
-          name: categoryName,
-          description: categoryDescription || null,
+        // Create new area
+        const newArea: AreaInsert = {
+          name: areaName,
+          description: areaDescription || null,
+          location: areaLocation || null,
         };
-        await addCategory(newCategory);
-        toast.success("Category added successfully");
+        await addArea(newArea);
+        toast.success("Area added successfully");
       }
 
       onOpenChange(false);
     } catch (error) {
-      console.error("Error saving category:", error);
-      toast.error("Failed to save category");
+      console.error("Error saving area:", error);
+      toast.error("Failed to save area");
     } finally {
       setLoading(false);
     }
@@ -119,9 +119,9 @@ export const CategoryManagementModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{categoryId ? "Edit Area" : "Add New Area"}</DialogTitle>
+          <DialogTitle>{areaId ? "Edit Area" : "Add New Area"}</DialogTitle>
           <DialogDescription>
-            {categoryId
+            {areaId
               ? "Update the area details below."
               : "Fill in the details to create a new area."}
           </DialogDescription>
@@ -135,24 +135,33 @@ export const CategoryManagementModal = ({
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="category-name">Area Name *</Label>
+                <Label htmlFor="area-name">Area Name *</Label>
                 <Input
-                  id="category-name"
+                  id="area-name"
                   placeholder="Enter area name"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
+                  value={areaName}
+                  onChange={(e) => setAreaName(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="category-description">Description</Label>
+                <Label htmlFor="area-description">Description</Label>
                 <textarea
-                  id="category-description"
+                  id="area-description"
                   rows={3}
                   className="w-full rounded-md border border-gray-300 p-2 text-sm"
                   placeholder="Enter area description"
-                  value={categoryDescription}
-                  onChange={(e) => setCategoryDescription(e.target.value)}
+                  value={areaDescription}
+                  onChange={(e) => setAreaDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="area-location">Location</Label>
+                <Input
+                  id="area-location"
+                  placeholder="Enter area location"
+                  value={areaLocation}
+                  onChange={(e) => setAreaLocation(e.target.value)}
                 />
               </div>
               <div className="text-sm text-gray-500">* Required fields</div>
@@ -172,7 +181,7 @@ export const CategoryManagementModal = ({
                     <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                     Saving...
                   </>
-                ) : categoryId ? (
+                ) : areaId ? (
                   "Update Area"
                 ) : (
                   "Add Area"

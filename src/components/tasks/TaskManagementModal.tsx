@@ -10,55 +10,51 @@ import {
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { useCategories } from "../../lib/hooks";
-import {
-  Category,
-  CategoryInsert,
-  CategoryUpdate,
-  getCategoryById,
-} from "../../lib/api/categories";
+import { useTasks } from "../../lib/hooks";
+import { Task, TaskInsert, TaskUpdate } from "../../lib/api/tasks";
 import { toast } from "../../lib/utils/toast";
 
-interface CategoryManagementModalProps {
+interface TaskManagementModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  categoryId?: string | null;
+  taskId?: string | null;
+  mode?: "create" | "edit";
 }
 
-export const CategoryManagementModal = ({
+export const TaskManagementModal = ({
   open,
   onOpenChange,
-  categoryId = null,
-}: CategoryManagementModalProps) => {
+  taskId = null,
+  mode = "create",
+}: TaskManagementModalProps) => {
   // Form states
-  const [categoryName, setCategoryName] = useState("");
-  const [categoryDescription, setCategoryDescription] = useState("");
+  const [taskName, setTaskName] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Get data from hooks
-  const { addCategory, editCategory } = useCategories();
+  const { addTask, editTask, getTask } = useTasks();
 
-  // Fetch category data if editing
+  // Fetch task data if editing
   useEffect(() => {
-    const fetchCategoryData = async () => {
-      if (categoryId && open) {
+    const fetchTaskData = async () => {
+      if (taskId && open && mode === "edit") {
         try {
           setLoading(true);
-          const category = await getCategoryById(categoryId);
-
-          setCategoryName(category.name);
-          setCategoryDescription(category.description || "");
+          const task = await getTask(taskId);
+          setTaskName(task.name);
+          setTaskDescription(task.description || "");
         } catch (error) {
-          console.error("Error fetching category:", error);
-          toast.error("Failed to load category details");
+          console.error("Error fetching task:", error);
+          toast.error("Failed to load task details");
         } finally {
           setLoading(false);
         }
       }
     };
 
-    fetchCategoryData();
-  }, [categoryId, open]);
+    fetchTaskData();
+  }, [taskId, open, mode, getTask]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -68,13 +64,13 @@ export const CategoryManagementModal = ({
   }, [open]);
 
   const resetForm = () => {
-    setCategoryName("");
-    setCategoryDescription("");
+    setTaskName("");
+    setTaskDescription("");
   };
 
   const validateForm = () => {
-    if (!categoryName) {
-      toast.error("Category name is required");
+    if (!taskName) {
+      toast.error("Task name is required");
       return false;
     }
     return true;
@@ -88,28 +84,28 @@ export const CategoryManagementModal = ({
     try {
       setLoading(true);
 
-      if (categoryId) {
-        // Update existing category
-        const categoryUpdate: CategoryUpdate = {
-          name: categoryName,
-          description: categoryDescription || null,
+      if (taskId && mode === "edit") {
+        // Update existing task
+        const taskUpdate: TaskUpdate = {
+          name: taskName,
+          description: taskDescription,
         };
-        await editCategory(categoryId, categoryUpdate);
-        toast.success("Category updated successfully");
+        await editTask(taskId, taskUpdate);
+        toast.success("Task updated successfully");
       } else {
-        // Create new category
-        const newCategory: CategoryInsert = {
-          name: categoryName,
-          description: categoryDescription || null,
+        // Create new task
+        const newTask: TaskInsert = {
+          name: taskName,
+          description: taskDescription,
         };
-        await addCategory(newCategory);
-        toast.success("Category added successfully");
+        await addTask(newTask);
+        toast.success("Task created successfully");
       }
 
       onOpenChange(false);
     } catch (error) {
-      console.error("Error saving category:", error);
-      toast.error("Failed to save category");
+      console.error("Error saving task:", error);
+      toast.error("Failed to save task");
     } finally {
       setLoading(false);
     }
@@ -119,11 +115,13 @@ export const CategoryManagementModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{categoryId ? "Edit Area" : "Add New Area"}</DialogTitle>
+          <DialogTitle>
+            {mode === "edit" ? "Edit Task" : "Create New Task"}
+          </DialogTitle>
           <DialogDescription>
-            {categoryId
-              ? "Update the area details below."
-              : "Fill in the details to create a new area."}
+            {mode === "edit"
+              ? "Update the task details below."
+              : "Fill in the details to create a new task."}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,24 +133,24 @@ export const CategoryManagementModal = ({
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="category-name">Area Name *</Label>
+                <Label htmlFor="task-name">Task Name *</Label>
                 <Input
-                  id="category-name"
-                  placeholder="Enter area name"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
+                  id="task-name"
+                  placeholder="Enter task name"
+                  value={taskName}
+                  onChange={(e) => setTaskName(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="category-description">Description</Label>
+                <Label htmlFor="description">Description</Label>
                 <textarea
-                  id="category-description"
+                  id="description"
                   rows={3}
                   className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                  placeholder="Enter area description"
-                  value={categoryDescription}
-                  onChange={(e) => setCategoryDescription(e.target.value)}
+                  placeholder="Enter task description"
+                  value={taskDescription}
+                  onChange={(e) => setTaskDescription(e.target.value)}
                 />
               </div>
               <div className="text-sm text-gray-500">* Required fields</div>
@@ -172,10 +170,10 @@ export const CategoryManagementModal = ({
                     <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                     Saving...
                   </>
-                ) : categoryId ? (
-                  "Update Area"
+                ) : mode === "edit" ? (
+                  "Update Task"
                 ) : (
-                  "Add Area"
+                  "Create Task"
                 )}
               </Button>
             </DialogFooter>
@@ -185,3 +183,5 @@ export const CategoryManagementModal = ({
     </Dialog>
   );
 };
+
+export default TaskManagementModal;

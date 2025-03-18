@@ -10,3 +10,4 @@ export * from "./supplyChain/materialRequests";
 export * from "./supplyChain/departments";
 export * from "./supplyChain/proformaInvoices";
 export * from "./documentFiles";
+export * from "./tasks";

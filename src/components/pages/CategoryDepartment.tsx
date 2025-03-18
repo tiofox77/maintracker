@@ -266,16 +266,16 @@ const CategoryDepartment = () => {
               className="w-full"
             >
               <TabsList className="grid w-full max-w-md grid-cols-2 mx-auto">
-                <TabsTrigger value="categories">Categories</TabsTrigger>
+                <TabsTrigger value="categories">Areas</TabsTrigger>
                 <TabsTrigger value="departments">Departments</TabsTrigger>
               </TabsList>
 
               {/* Categories Tab */}
               <TabsContent value="categories" className="mt-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold">Equipment Categories</h2>
+                  <h2 className="text-2xl font-bold">Equipment Areas</h2>
                   <Button onClick={handleAddCategory}>
-                    <Plus className="mr-2 h-4 w-4" /> Add Category
+                    <Plus className="mr-2 h-4 w-4" /> Add Area
                   </Button>
                 </div>
 
@@ -286,7 +286,7 @@ const CategoryDepartment = () => {
                       <div className="relative max-w-md">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <Input
-                          placeholder="Search categories..."
+                          placeholder="Search areas..."
                           className="pl-10"
                           value={categorySearchQuery}
                           onChange={(e) =>
@@ -316,7 +316,7 @@ const CategoryDepartment = () => {
                                 >
                                   <div className="flex justify-center items-center">
                                     <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                                    <span>Loading categories...</span>
+                                    <span>Loading areas...</span>
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -326,7 +326,7 @@ const CategoryDepartment = () => {
                                   colSpan={3}
                                   className="text-center py-6 text-red-500"
                                 >
-                                  Error loading categories. Please try again.
+                                  Error loading areas. Please try again.
                                 </TableCell>
                               </TableRow>
                             ) : filteredCategories.length > 0 ? (
@@ -366,7 +366,7 @@ const CategoryDepartment = () => {
                                   colSpan={3}
                                   className="text-center py-6 text-gray-500"
                                 >
-                                  No categories found matching your search.
+                                  No areas found matching your search.
                                 </TableCell>
                               </TableRow>
                             )}
@@ -499,23 +499,23 @@ const CategoryDepartment = () => {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {selectedCategory ? "Edit Category" : "Add New Category"}
+              {selectedCategory ? "Edit Area" : "Add New Area"}
             </DialogTitle>
             <DialogDescription>
               {selectedCategory
-                ? "Update the category details below."
-                : "Fill in the details to create a new category."}
+                ? "Update the area details below."
+                : "Fill in the details to create a new area."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCategorySubmit}>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label htmlFor="category-name" className="text-sm font-medium">
-                  Category Name
+                  Area Name
                 </label>
                 <Input
                   id="category-name"
-                  placeholder="Enter category name"
+                  placeholder="Enter area name"
                   value={categoryName}
                   onChange={(e) => setCategoryName(e.target.value)}
                   required
@@ -532,7 +532,7 @@ const CategoryDepartment = () => {
                   id="category-description"
                   rows={3}
                   className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                  placeholder="Enter category description"
+                  placeholder="Enter area description"
                   value={categoryDescription}
                   onChange={(e) => setCategoryDescription(e.target.value)}
                 />
@@ -547,7 +547,7 @@ const CategoryDepartment = () => {
                 Cancel
               </Button>
               <Button type="submit">
-                {selectedCategory ? "Update Category" : "Add Category"}
+                {selectedCategory ? "Update Area" : "Add Area"}
               </Button>
             </DialogFooter>
           </form>

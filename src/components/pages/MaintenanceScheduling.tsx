@@ -7,6 +7,10 @@ import {
   addWeeks,
   addMonths,
   addYears,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  getDay,
 } from "date-fns";
 import DashboardHeader from "../dashboard/DashboardHeader";
 import Sidebar from "../layout/Sidebar";
@@ -67,10 +71,11 @@ import { Label } from "../ui/label";
 import {
   useMaintenanceTasks,
   useEquipment,
-  useCategories,
-  useDepartments,
+  useLines,
+  useAreas,
   useTaskStatusHistory,
   useUsers,
+  useTasks,
 } from "../../lib/hooks";
 import {
   MaintenanceTask,
@@ -103,8 +108,8 @@ const MaintenanceScheduling = () => {
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [equipmentId, setEquipmentId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
+  const [lineId, setLineId] = useState("");
+  const [areaId, setAreaId] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [frequency, setFrequency] = useState<FrequencyType>("custom");
   const [customDays, setCustomDays] = useState("");
@@ -117,6 +122,10 @@ const MaintenanceScheduling = () => {
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
   const [actualDuration, setActualDuration] = useState("");
+  const [taskId, setTaskId] = useState("");
+  const [type, setType] = useState<"predictive" | "corrective" | "conditional">(
+    "corrective",
+  );
 
   // Get maintenance tasks and equipment from hooks
   const {
@@ -130,14 +139,15 @@ const MaintenanceScheduling = () => {
   } = useMaintenanceTasks();
 
   const { equipment, loading: equipmentLoading } = useEquipment();
-  const { categories, loading: categoriesLoading } = useCategories();
-  const { departments, loading: departmentsLoading } = useDepartments();
+  const { lines, loading: linesLoading } = useLines();
+  const { areas, loading: areasLoading } = useAreas();
   const {
     statusHistory,
     loading: historyLoading,
     addStatusHistory,
     fetchTaskStatusHistory,
   } = useTaskStatusHistory();
+  const { tasks: tasksList, loading: tasksListLoading } = useTasks();
   const { users, loading: usersLoading } = useUsers();
 
   const [selectedTask, setSelectedTask] = useState<MaintenanceTask | null>(
@@ -262,14 +272,16 @@ const MaintenanceScheduling = () => {
     setTaskTitle(task.title);
     setTaskDescription(task.description || "");
     setEquipmentId(task.equipment_id);
-    setCategoryId(task.category_id || "");
+    setLineId(task.category_id || "");
+    setTaskId(task.task_id || "");
+    setType(task.type || "corrective");
 
     // Get department ID from equipment
     const equipmentItem = equipment.find((e) => e.id === task.equipment_id);
     if (equipmentItem) {
-      setDepartmentId(equipmentItem.department_id);
+      setAreaId(equipmentItem.department_id);
     } else {
-      setDepartmentId("");
+      setAreaId("");
     }
 
     setScheduledDate(task.scheduled_date || "");
@@ -395,8 +407,8 @@ const MaintenanceScheduling = () => {
     setTaskTitle("");
     setTaskDescription("");
     setEquipmentId("");
-    setCategoryId("");
-    setDepartmentId("");
+    setLineId("");
+    setAreaId("");
     setScheduledDate("");
     setFrequency("custom");
     setCustomDays("");
@@ -404,11 +416,13 @@ const MaintenanceScheduling = () => {
     setStatus("scheduled");
     setAssignedTo("");
     setNotes("");
+    setTaskId("");
+    setType("corrective");
   };
 
   const validateForm = () => {
-    if (!taskTitle) {
-      toast.error("Task title is required");
+    if (!taskId) {
+      toast.error("Task selection is required");
       return false;
     }
     if (!equipmentId) {
@@ -421,6 +435,10 @@ const MaintenanceScheduling = () => {
     }
     if (frequency === "custom" && !customDays) {
       toast.error("Custom days is required when frequency is custom");
+      return false;
+    }
+    if (!type) {
+      toast.error("Maintenance type is required");
       return false;
     }
     return true;
@@ -438,7 +456,9 @@ const MaintenanceScheduling = () => {
           title: taskTitle,
           description: taskDescription,
           equipment_id: equipmentId,
-          category_id: categoryId,
+          category_id: lineId,
+          task_id: taskId || null,
+          type: type,
           scheduled_date: scheduledDate,
           frequency: frequency,
           custom_days:
@@ -467,7 +487,9 @@ const MaintenanceScheduling = () => {
           title: taskTitle,
           description: taskDescription,
           equipment_id: equipmentId,
-          category_id: categoryId,
+          category_id: lineId,
+          task_id: taskId || null,
+          type: type,
           scheduled_date: scheduledDate,
           frequency: frequency,
           custom_days:
@@ -562,10 +584,10 @@ const MaintenanceScheduling = () => {
     return equip ? equip.name : "Unknown Equipment";
   };
 
-  // Helper function to get department name by ID
-  const getDepartmentName = (departmentId: string) => {
-    const department = departments.find((d) => d.id === departmentId);
-    return department ? department.name : "Unknown Department";
+  // Helper function to get area name by ID
+  const getAreaName = (areaId: string) => {
+    const area = areas.find((a) => a.id === areaId);
+    return area ? area.name : "Unknown Area";
   };
 
   // Format date for display
@@ -596,6 +618,94 @@ const MaintenanceScheduling = () => {
       default:
         return "One-time";
     }
+  };
+
+  // Generate calendar grid for the current month
+  const generateCalendarGrid = () => {
+    if (!selectedDate) return [];
+
+    const start = startOfMonth(selectedDate);
+    const end = endOfMonth(selectedDate);
+    const days = eachDayOfInterval({ start, end });
+    const startDay = getDay(start);
+
+    // Create empty cells for days before the first day of the month
+    const emptyCellsBefore = Array(startDay).fill(null);
+    const allCells = [...emptyCellsBefore, ...days];
+
+    // Create rows for the calendar (weeks)
+    const rows = [];
+    let cells = [];
+
+    allCells.forEach((day, i) => {
+      if (i > 0 && i % 7 === 0) {
+        rows.push(cells);
+        cells = [];
+      }
+      cells.push(day);
+    });
+
+    // Add remaining cells
+    if (cells.length > 0) {
+      // Fill in the rest of the row with empty cells
+      while (cells.length < 7) {
+        cells.push(null);
+      }
+      rows.push(cells);
+    }
+
+    return rows;
+  };
+
+  // Get task color based on priority
+  const getTaskColor = (task: MaintenanceTask) => {
+    switch (task.priority) {
+      case "critical":
+        return "bg-red-500 text-white";
+      case "high":
+        return "bg-orange-400 text-white";
+      case "medium":
+        return "bg-green-500 text-white";
+      case "low":
+        return "bg-blue-400 text-white";
+      default:
+        return "bg-gray-400 text-white";
+    }
+  };
+
+  // Render a calendar cell with tasks
+  const renderCalendarCell = (day: Date | null) => {
+    if (!day) {
+      return <td className="border p-1 bg-gray-50"></td>;
+    }
+
+    const dateKey = format(day, "yyyy-MM-dd");
+    const isToday = day.toDateString() === new Date().toDateString();
+    const dayTasks = calendarEvents[dateKey] || [];
+
+    return (
+      <td
+        className={`border p-1 relative ${isToday ? "bg-blue-50" : ""}`}
+        onClick={() => setSelectedDate(day)}
+      >
+        <div className="font-medium text-sm mb-1">{format(day, "d")}</div>
+        <div className="space-y-1">
+          {dayTasks.map((task) => (
+            <div
+              key={task.id}
+              className={`${getTaskColor(task)} text-xs p-1 rounded cursor-pointer truncate`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEditTask(task);
+              }}
+              title={task.title}
+            >
+              {task.title}
+            </div>
+          ))}
+        </div>
+      </td>
+    );
   };
 
   return (
@@ -955,572 +1065,147 @@ const MaintenanceScheduling = () => {
                       </Button>
                     </div>
                     <CardTitle className="text-xl font-bold">
-                      {selectedDate
-                        ? format(selectedDate, "MMMM yyyy")
-                        : format(new Date(), "MMMM yyyy")}
+                      {selectedDate ? format(selectedDate, "MMMM yyyy") : ""}
                     </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 px-3 py-1 text-xs"
-                      >
-                        month
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 px-3 py-1 text-xs"
-                      >
-                        week
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 px-3 py-1 text-xs"
-                      >
-                        day
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600 px-3 py-1 text-xs"
-                      >
-                        list
-                      </Button>
-                    </div>
                   </div>
                 </CardHeader>
-
                 <CardContent className="p-0">
-                  {/* Days of the week */}
-                  <div className="grid grid-cols-7 bg-white">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (day, index) => (
-                        <div
-                          key={day}
-                          className="text-center font-semibold py-2 text-gray-700 border-b border-gray-200"
-                        >
-                          {day}
-                        </div>
-                      ),
-                    )}
+                  {/* Calendar Grid */}
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full border-collapse min-w-full">
+                      <thead>
+                        <tr>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Sunday
+                          </th>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Monday
+                          </th>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Tuesday
+                          </th>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Wednesday
+                          </th>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Thursday
+                          </th>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Friday
+                          </th>
+                          <th className="border p-2 bg-gray-100 text-gray-800">
+                            Saturday
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {generateCalendarGrid().map((week, weekIndex) => (
+                          <tr key={weekIndex} className="h-24">
+                            {week.map((day, dayIndex) =>
+                              renderCalendarCell(day),
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
 
-                  {/* Calendar grid */}
-                  <div className="calendar-grid">
+                  {/* Tasks for Selected Date */}
+                  <div className="p-4 border-t">
+                    <h3 className="text-lg font-semibold mb-3">
+                      {selectedDate
+                        ? `Tasks for ${format(selectedDate, "MMMM d, yyyy")}`
+                        : "Select a date to view tasks"}
+                    </h3>
+
                     {selectedDate && (
-                      <div className="grid grid-cols-7 auto-rows-fr">
-                        {/* Generate dynamic calendar based on selected date */}
-                        {(() => {
-                          const currentDate = new Date(selectedDate);
-                          const year = currentDate.getFullYear();
-                          const month = currentDate.getMonth();
-
-                          // First day of the month
-                          const firstDay = new Date(year, month, 1);
-                          // Last day of the month
-                          const lastDay = new Date(year, month + 1, 0);
-
-                          // Day of the week for the first day (0 = Sunday, 6 = Saturday)
-                          const firstDayOfWeek = firstDay.getDay();
-
-                          // Days from previous month to fill the beginning of the calendar
-                          const prevMonthDays = [];
-                          if (firstDayOfWeek > 0) {
-                            const prevMonth = new Date(year, month, 0);
-                            const prevMonthLastDay = prevMonth.getDate();
-
-                            for (let i = firstDayOfWeek - 1; i >= 0; i--) {
-                              const day = prevMonthLastDay - i;
-                              const date = new Date(year, month - 1, day);
-                              const dateKey = format(date, "yyyy-MM-dd");
-                              const dayEvents = calendarEvents[dateKey] || [];
-
-                              prevMonthDays.push(
-                                <div
-                                  key={`prev-${day}`}
-                                  className="border p-2 bg-gray-50 text-gray-400 min-h-[100px]"
-                                  onClick={() => setSelectedDate(date)}
-                                >
-                                  <div className="text-sm">{day}</div>
-                                  {dayEvents.map((event, index) => (
-                                    <div
-                                      key={`prev-${day}-event-${index}`}
-                                      className={`mt-1 text-xs ${event.status === "completed" ? "bg-green-500" : "bg-blue-500"} text-white p-1 rounded-sm cursor-pointer`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTask(event);
-                                        setStatus(event.status || "scheduled");
-                                        setStatusUpdateModalOpen(true);
-                                      }}
+                      <div className="space-y-3">
+                        {calendarEvents[format(selectedDate, "yyyy-MM-dd")] ? (
+                          calendarEvents[
+                            format(selectedDate, "yyyy-MM-dd")
+                          ].map((task) => (
+                            <div
+                              key={task.id}
+                              className="flex items-center justify-between p-3 bg-white rounded-md border hover:shadow-md transition-shadow"
+                            >
+                              <div className="flex-1">
+                                <div className="font-medium">{task.title}</div>
+                                <div className="text-sm text-gray-500">
+                                  {task.equipment?.name ||
+                                    getEquipmentName(task.equipment_id)}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {getPriorityBadge(task.priority)}
+                                {getStatusBadge(task.status)}
+                                <div className="flex space-x-1">
+                                  {task.status !== "completed" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() =>
+                                        handleCompleteTask(
+                                          task.is_recurring_instance
+                                            ? task.original_task_id
+                                            : task.id,
+                                        )
+                                      }
                                     >
-                                      {event.title}
-                                    </div>
-                                  ))}
-                                </div>,
-                              );
-                            }
-                          }
-
-                          // Days of the current month
-                          const currentMonthDays = [];
-                          for (let day = 1; day <= lastDay.getDate(); day++) {
-                            const date = new Date(year, month, day);
-                            const dateKey = format(date, "yyyy-MM-dd");
-                            const dayEvents = calendarEvents[dateKey] || [];
-                            const isToday =
-                              format(date, "yyyy-MM-dd") ===
-                              format(new Date(), "yyyy-MM-dd");
-                            const isSelected =
-                              selectedDate &&
-                              format(date, "yyyy-MM-dd") ===
-                                format(selectedDate, "yyyy-MM-dd");
-
-                            currentMonthDays.push(
-                              <div
-                                key={`current-${day}`}
-                                className={`border p-2 min-h-[100px] ${isToday ? "bg-blue-50" : ""} ${isSelected ? "bg-yellow-50" : ""}`}
-                                onClick={() => setSelectedDate(date)}
-                              >
-                                <div className="text-sm font-medium">{day}</div>
-                                {dayEvents.map((event, index) => (
-                                  <div
-                                    key={`current-${day}-event-${index}`}
-                                    className={`mt-1 text-xs ${event.status === "completed" ? "bg-green-500" : event.priority === "critical" ? "bg-red-500" : event.priority === "high" ? "bg-orange-500" : "bg-blue-500"} text-white p-1 rounded-sm cursor-pointer`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedTask(event);
-                                      setStatus(event.status || "scheduled");
-                                      setStatusUpdateModalOpen(true);
-                                    }}
+                                      <CheckCircle
+                                        size={16}
+                                        className="text-green-500"
+                                      />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEditTask(task)}
                                   >
-                                    {event.title}
-                                  </div>
-                                ))}
-                              </div>,
-                            );
-                          }
-
-                          // Days from next month to fill the end of the calendar
-                          const nextMonthDays = [];
-                          const totalCells = 42; // 6 rows x 7 columns
-                          const remainingCells =
-                            totalCells -
-                            (prevMonthDays.length + currentMonthDays.length);
-
-                          for (let day = 1; day <= remainingCells; day++) {
-                            const date = new Date(year, month + 1, day);
-                            const dateKey = format(date, "yyyy-MM-dd");
-                            const dayEvents = calendarEvents[dateKey] || [];
-
-                            nextMonthDays.push(
-                              <div
-                                key={`next-${day}`}
-                                className="border p-2 bg-gray-50 text-gray-400 min-h-[100px]"
-                                onClick={() => setSelectedDate(date)}
-                              >
-                                <div className="text-sm">{day}</div>
-                                {dayEvents.map((event, index) => (
-                                  <div
-                                    key={`next-${day}-event-${index}`}
-                                    className={`mt-1 text-xs ${event.status === "completed" ? "bg-green-500" : "bg-blue-500"} text-white p-1 rounded-sm cursor-pointer`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedTask(event);
-                                      setStatus(event.status || "scheduled");
-                                      setStatusUpdateModalOpen(true);
-                                    }}
-                                  >
-                                    {event.title}
-                                  </div>
-                                ))}
-                              </div>,
-                            );
-                          }
-
-                          return [
-                            ...prevMonthDays,
-                            ...currentMonthDays,
-                            ...nextMonthDays,
-                          ];
-                        })()}
+                                    <Edit size={16} />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-6 text-gray-500">
+                            No tasks scheduled for this date
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Selected Date Details */}
-              <div className="mt-6">
-                <Card className="shadow-md">
-                  <CardHeader className="bg-gray-100 border-b pb-3">
-                    <div className="flex justify-between items-center">
-                      <CardTitle className="text-lg">Date Details</CardTitle>
-                      {selectedDate && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() => setSelectedDate(undefined)}
-                        >
-                          Clear selection
-                        </Button>
-                      )}
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-4">
-                    {selectedDate ? (
-                      <div className="space-y-6">
-                        <div className="bg-gray-100 p-3 rounded-md border text-center">
-                          <h3 className="text-lg font-bold">
-                            {format(selectedDate, "EEEE, MMMM d, yyyy")}
-                          </h3>
-                        </div>
-
-                        {/* Tasks for the selected date */}
-                        {calendarEvents[format(selectedDate, "yyyy-MM-dd")] &&
-                        calendarEvents[format(selectedDate, "yyyy-MM-dd")]
-                          .length > 0 ? (
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <p className="text-sm font-semibold text-gray-700 flex items-center">
-                                <CalendarIcon className="h-4 w-4 mr-1" />
-                                Scheduled tasks (
-                                {
-                                  calendarEvents[
-                                    format(selectedDate, "yyyy-MM-dd")
-                                  ].length
-                                }
-                                ):
-                              </p>
-                              <Button
-                                size="sm"
-                                onClick={handleAddTask}
-                                className="text-xs"
-                              >
-                                <Plus className="h-3 w-3 mr-1" /> New task
-                              </Button>
-                            </div>
-
-                            <div className="bg-white rounded-md border overflow-hidden">
-                              <ul className="divide-y divide-gray-100 max-h-[300px] overflow-y-auto">
-                                {calendarEvents[
-                                  format(selectedDate, "yyyy-MM-dd")
-                                ].map((task, index) => (
-                                  <li
-                                    key={task.id}
-                                    className={`p-3 hover:bg-gray-50 transition-colors cursor-pointer ${task.status === "completed" ? "bg-green-50" : ""}`}
-                                    onClick={() => {
-                                      setSelectedTask(task);
-                                      setStatus(task.status || "scheduled");
-                                      setStatusUpdateModalOpen(true);
-                                    }}
-                                  >
-                                    <div className="flex items-start gap-2">
-                                      <div
-                                        className={`w-3 h-3 rounded-full flex-shrink-0 mt-1 ${task.priority === "critical" ? "bg-red-500" : task.priority === "high" ? "bg-orange-500" : task.priority === "medium" ? "bg-blue-500" : "bg-gray-500"}`}
-                                      ></div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium">
-                                          {task.title}
-                                        </p>
-                                        <div className="flex items-center text-xs text-gray-500 mt-1">
-                                          <span className="truncate">
-                                            {task.equipment?.name ||
-                                              getEquipmentName(
-                                                task.equipment_id,
-                                              )}
-                                          </span>
-                                          <span className="mx-1">•</span>
-                                          <span>{getFrequencyText(task)}</span>
-                                        </div>
-                                        <div className="flex mt-2 justify-between items-center">
-                                          {getPriorityBadge(task.priority)}
-                                          <div className="flex gap-1">
-                                            {task.status !== "completed" && (
-                                              <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-7 px-2 text-xs text-green-600 border-green-200 hover:bg-green-50"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleCompleteTask(task.id);
-                                                }}
-                                              >
-                                                <CheckCircle
-                                                  size={12}
-                                                  className="mr-1"
-                                                />
-                                                {task.frequency !== "custom" ||
-                                                task.custom_days
-                                                  ? "Complete & Schedule Next"
-                                                  : "Complete"}
-                                              </Button>
-                                            )}
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-7 px-2 text-xs"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleEditTask(task);
-                                              }}
-                                            >
-                                              <Edit
-                                                size={12}
-                                                className="mr-1"
-                                              />
-                                              Edit
-                                            </Button>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-7 px-2 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                fetchTaskStatusHistory(task.id);
-                                                setSelectedTask(task);
-                                                setHistoryModalOpen(true);
-                                              }}
-                                            >
-                                              <History
-                                                size={12}
-                                                className="mr-1"
-                                              />
-                                              History
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-center py-10 bg-gray-50 rounded-md border border-dashed border-gray-200">
-                            <CalendarIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                            <p className="text-sm text-gray-500 mb-4">
-                              No tasks scheduled for this date
-                            </p>
-                            <Button onClick={handleAddTask}>
-                              <Plus className="h-4 w-4 mr-1" /> Schedule
-                              maintenance
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Task Status History for the selected date */}
-                        {selectedDate && (
-                          <div className="mt-6">
-                            <TaskStatusHistoryTable
-                              startDate={format(selectedDate, "yyyy-MM-dd")}
-                              endDate={format(selectedDate, "yyyy-MM-dd")}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-16 text-center">
-                        <CalendarIcon className="h-16 w-16 text-gray-300 mb-4" />
-                        <p className="text-gray-500 mb-4 max-w-xs mx-auto">
-                          Select a date in the calendar to view scheduled tasks
-                        </p>
-                        <Button onClick={() => setSelectedDate(new Date())}>
-                          Select today
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Task History Modal */}
+      {/* Task Status History Modal */}
       <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
         <DialogContent className="sm:max-w-[800px]">
           <DialogHeader>
             <DialogTitle>Task Status History</DialogTitle>
             <DialogDescription>
-              {selectedTask && (
-                <div className="mt-2">
-                  <p className="font-medium">{selectedTask.title}</p>
-                  <p className="text-sm text-gray-500">
-                    {selectedTask.equipment?.name ||
-                      getEquipmentName(selectedTask.equipment_id)}
-                  </p>
-                </div>
-              )}
+              {selectedTask
+                ? `History for task: ${selectedTask.title}`
+                : "Task history"}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <div className="flex justify-end gap-2 mb-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Export to Excel
-                  if (!selectedTask) return;
-
-                  // Create CSV content
-                  const headers = ["Date", "Status", "Notes"];
-                  const csvRows = [headers];
-
-                  statusHistory.forEach((history) => {
-                    csvRows.push([
-                      format(
-                        new Date(history.status_date),
-                        "MMM d, yyyy h:mm a",
-                      ),
-                      history.status,
-                      history.notes || "",
-                    ]);
-                  });
-
-                  const csvContent = csvRows
-                    .map((row) => row.join(","))
-                    .join("\n");
-
-                  // Create a blob and download
-                  const blob = new Blob([csvContent], {
-                    type: "text/csv;charset=utf-8;",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement("a");
-                  link.setAttribute("href", url);
-                  link.setAttribute(
-                    "download",
-                    `task_history_${selectedTask.id}.csv`,
-                  );
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-
-                  toast.success("History exported to Excel");
-                }}
-              >
-                <Download className="h-4 w-4 mr-2" /> Export to Excel
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Export to PDF (in a real app, you would use a library like jsPDF)
-                  if (!selectedTask) return;
-
-                  // For now, we'll just show a toast message
-                  toast.success("History exported to PDF");
-
-                  // In a real implementation, you would:
-                  // 1. Create a PDF document
-                  // 2. Add the task details and history table
-                  // 3. Save the PDF file
-                }}
-              >
-                <Download className="h-4 w-4 mr-2" /> Export to PDF
-              </Button>
-            </div>
-
-            {selectedTask && (
+            {historyLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                <span>Loading history...</span>
+              </div>
+            ) : (
               <TaskStatusHistoryTable
-                taskId={
-                  selectedTask.is_recurring_instance &&
-                  selectedTask.original_task_id
-                    ? selectedTask.original_task_id
-                    : selectedTask.id
-                }
+                statusHistory={statusHistory}
+                taskId={selectedTask?.id || ""}
               />
             )}
-
-            <div className="mt-6">
-              <h3 className="text-sm font-medium mb-2">
-                Add New Status Update
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="history-status">Status</Label>
-                  <Select
-                    value={status}
-                    onValueChange={(
-                      value:
-                        | "scheduled"
-                        | "in-progress"
-                        | "completed"
-                        | "cancelled"
-                        | "partial",
-                    ) => setStatus(value)}
-                  >
-                    <SelectTrigger id="history-status">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="scheduled">Scheduled</SelectItem>
-                      <SelectItem value="in-progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                      <SelectItem value="partial">Partial</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="history-notes">Notes</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="history-notes"
-                      placeholder="Enter notes about this status update"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                    />
-                    <Button
-                      onClick={async () => {
-                        if (!selectedTask || !notes) return;
-
-                        try {
-                          // Get the actual task ID (handle recurring instances)
-                          let taskId = selectedTask.id;
-                          if (
-                            selectedTask.is_recurring_instance &&
-                            selectedTask.original_task_id
-                          ) {
-                            taskId = selectedTask.original_task_id;
-                          }
-
-                          // Add entry to task status history
-                          await addStatusHistory({
-                            task_id: taskId,
-                            status_date: new Date().toISOString(),
-                            status: status,
-                            notes: notes,
-                          });
-
-                          // Update the task status if needed
-                          if (status !== selectedTask.status) {
-                            await editTask(taskId, { status });
-                          }
-
-                          // Refresh history
-                          await fetchTaskStatusHistory(taskId);
-
-                          setNotes("");
-                          toast.success("Status update added successfully");
-                        } catch (error) {
-                          console.error("Error adding status update:", error);
-                          toast.error("Failed to add status update");
-                        }
-                      }}
-                    >
-                      Add Update
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button onClick={() => setHistoryModalOpen(false)}>Close</Button>
@@ -1528,14 +1213,73 @@ const MaintenanceScheduling = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Maintenance Task Form Modal */}
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete this task?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              task and remove it from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteTask}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Complete Task Dialog */}
+      <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Complete Maintenance Task</DialogTitle>
+            <DialogDescription>
+              Enter completion notes for this task.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="completion-notes">Completion Notes</Label>
+              <textarea
+                id="completion-notes"
+                rows={3}
+                className="w-full rounded-md border border-gray-300 p-2 text-sm"
+                placeholder="Enter any notes about the completed work"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCompleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={confirmCompleteTask}>
+              Complete Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Maintenance Scheduling Modal - Using the shared component */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-[800px]">
           <DialogHeader>
             <DialogTitle>
-              {selectedTask
-                ? "Edit Maintenance Task"
-                : "Schedule New Maintenance Task"}
+              {selectedTask ? "Edit Maintenance Task" : "Schedule New Task"}
             </DialogTitle>
             <DialogDescription>
               {selectedTask
@@ -1547,20 +1291,57 @@ const MaintenanceScheduling = () => {
             <div className="grid gap-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="task-title">Task Title *</Label>
-                  <Input
-                    id="task-title"
-                    placeholder="Enter task title"
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
+                  <Label htmlFor="task">Task *</Label>
+                  <Select
+                    value={taskId}
+                    onValueChange={(value) => {
+                      setTaskId(value);
+                      const selectedTask = tasksList.find(
+                        (task) => task.id === value,
+                      );
+                      if (selectedTask) {
+                        setTaskTitle(selectedTask.name);
+                        setTaskDescription(selectedTask.description || "");
+                      }
+                    }}
                     required
-                  />
+                  >
+                    <SelectTrigger id="task">
+                      <SelectValue placeholder="Select task" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tasksListLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading tasks...
+                        </SelectItem>
+                      ) : tasksList.length > 0 ? (
+                        tasksList.map((task) => (
+                          <SelectItem key={task.id} value={task.id}>
+                            {task.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-tasks" disabled>
+                          No tasks available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="equipment">Equipment *</Label>
                   <Select
                     value={equipmentId}
-                    onValueChange={setEquipmentId}
+                    onValueChange={(value) => {
+                      setEquipmentId(value);
+                      const selectedEquipment = equipment.find(
+                        (e) => e.id === value,
+                      );
+                      if (selectedEquipment) {
+                        setAreaId(selectedEquipment.department_id);
+                        setLineId(selectedEquipment.category_id || "");
+                      }
+                    }}
                     required
                   >
                     <SelectTrigger id="equipment">
@@ -1586,50 +1367,50 @@ const MaintenanceScheduling = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Select value={categoryId} onValueChange={setCategoryId}>
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="Select category" />
+                  <Label htmlFor="line">Line</Label>
+                  <Select value={lineId} onValueChange={setLineId}>
+                    <SelectTrigger id="line">
+                      <SelectValue placeholder="Select line" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categoriesLoading ? (
+                      {linesLoading ? (
                         <SelectItem value="loading" disabled>
-                          Loading categories...
+                          Loading lines...
                         </SelectItem>
-                      ) : categories.length > 0 ? (
-                        categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
+                      ) : lines.length > 0 ? (
+                        lines.map((line) => (
+                          <SelectItem key={line.id} value={line.id}>
+                            {line.name}
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="no-categories" disabled>
-                          No categories available
+                        <SelectItem value="no-lines" disabled>
+                          No lines available
                         </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Select value={departmentId} onValueChange={setDepartmentId}>
-                    <SelectTrigger id="department">
-                      <SelectValue placeholder="Select department" />
+                  <Label htmlFor="area">Area</Label>
+                  <Select value={areaId} onValueChange={setAreaId}>
+                    <SelectTrigger id="area">
+                      <SelectValue placeholder="Select area" />
                     </SelectTrigger>
                     <SelectContent>
-                      {departmentsLoading ? (
+                      {areasLoading ? (
                         <SelectItem value="loading" disabled>
-                          Loading departments...
+                          Loading areas...
                         </SelectItem>
-                      ) : departments.length > 0 ? (
-                        departments.map((department) => (
-                          <SelectItem key={department.id} value={department.id}>
-                            {department.name}
+                      ) : areas.length > 0 ? (
+                        areas.map((area) => (
+                          <SelectItem key={area.id} value={area.id}>
+                            {area.name}
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="no-departments" disabled>
-                          No departments available
+                        <SelectItem value="no-areas" disabled>
+                          No areas available
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -1647,17 +1428,12 @@ const MaintenanceScheduling = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="frequency">Frequency</Label>
-                  <Select
-                    value={frequency}
-                    onValueChange={(value: FrequencyType) =>
-                      setFrequency(value)
-                    }
-                  >
+                  <Select value={frequency} onValueChange={setFrequency}>
                     <SelectTrigger id="frequency">
                       <SelectValue placeholder="Select frequency" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="custom">Custom Days</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
                       <SelectItem value="weekly">Weekly</SelectItem>
                       <SelectItem value="monthly">Monthly</SelectItem>
                       <SelectItem value="yearly">Yearly</SelectItem>
@@ -1671,7 +1447,6 @@ const MaintenanceScheduling = () => {
                       id="custom-days"
                       type="number"
                       min="1"
-                      step="1"
                       placeholder="Enter days between occurrences"
                       value={customDays}
                       onChange={(e) => setCustomDays(e.target.value)}
@@ -1694,6 +1469,25 @@ const MaintenanceScheduling = () => {
                       <SelectItem value="medium">Medium</SelectItem>
                       <SelectItem value="high">High</SelectItem>
                       <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Type *</Label>
+                  <Select
+                    value={type}
+                    onValueChange={(
+                      value: "predictive" | "corrective" | "conditional",
+                    ) => setType(value)}
+                    required
+                  >
+                    <SelectTrigger id="type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="predictive">Predictive</SelectItem>
+                      <SelectItem value="corrective">Corrective</SelectItem>
+                      <SelectItem value="conditional">Conditional</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1731,23 +1525,17 @@ const MaintenanceScheduling = () => {
                     <SelectContent>
                       {usersLoading ? (
                         <SelectItem value="loading" disabled>
-                          Loading technicians...
+                          Loading users...
                         </SelectItem>
-                      ) : users.filter((user) => user.role === "technician")
-                          .length > 0 ? (
-                        users
-                          .filter((user) => user.role === "technician")
-                          .map((technician) => (
-                            <SelectItem
-                              key={technician.id}
-                              value={technician.id}
-                            >
-                              {technician.first_name} {technician.last_name}
-                            </SelectItem>
-                          ))
+                      ) : users.length > 0 ? (
+                        users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name || user.email}
+                          </SelectItem>
+                        ))
                       ) : (
-                        <SelectItem value="no-technicians" disabled>
-                          No technicians available
+                        <SelectItem value="no-users" disabled>
+                          No users available
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -1782,10 +1570,7 @@ const MaintenanceScheduling = () => {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setModalOpen(false);
-                  resetForm();
-                }}
+                onClick={() => setModalOpen(false)}
               >
                 Cancel
               </Button>
@@ -1794,248 +1579,6 @@ const MaintenanceScheduling = () => {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Are you sure you want to delete this task?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              maintenance task and remove it from our servers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteTask}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Complete Task Dialog */}
-      <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Complete Maintenance Task</DialogTitle>
-            <DialogDescription>
-              {(() => {
-                const task = taskToComplete
-                  ? tasks.find((t) => t.id === taskToComplete)
-                  : null;
-                if (
-                  task &&
-                  (task.frequency !== "custom" ||
-                    (task.frequency === "custom" && task.custom_days))
-                ) {
-                  return "Enter completion notes. A new task will be automatically scheduled based on the frequency.";
-                }
-                return "Enter any completion notes.";
-              })()}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="completion-notes">Completion Notes</Label>
-              <textarea
-                id="completion-notes"
-                rows={3}
-                className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                placeholder="Enter any notes about the completed work"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCompleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmCompleteTask}>
-              {(() => {
-                const task = taskToComplete
-                  ? tasks.find((t) => t.id === taskToComplete)
-                  : null;
-                if (
-                  task &&
-                  (task.frequency !== "custom" ||
-                    (task.frequency === "custom" && task.custom_days))
-                ) {
-                  return "Complete & Schedule Next";
-                }
-                return "Complete Task";
-              })()}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Status Update Modal */}
-      <Dialog
-        open={statusUpdateModalOpen}
-        onOpenChange={setStatusUpdateModalOpen}
-      >
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Update Task Status</DialogTitle>
-            <DialogDescription>
-              {selectedTask && (
-                <div className="mt-2">
-                  <p className="font-medium">{selectedTask.title}</p>
-                  <p className="text-sm text-gray-500">
-                    {selectedTask.equipment?.name ||
-                      getEquipmentName(selectedTask.equipment_id)}
-                  </p>
-                </div>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="status-update">Status</Label>
-              <Select
-                value={status}
-                onValueChange={(
-                  value:
-                    | "scheduled"
-                    | "in-progress"
-                    | "completed"
-                    | "cancelled"
-                    | "partial",
-                ) => setStatus(value)}
-              >
-                <SelectTrigger id="status-update">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="scheduled">Scheduled</SelectItem>
-                  <SelectItem value="in-progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="partial">Partial</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status-notes">Status Notes</Label>
-              <textarea
-                id="status-notes"
-                rows={3}
-                className="w-full rounded-md border border-gray-300 p-2 text-sm"
-                placeholder="Enter notes about this status update"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </div>
-            <div className="pt-2">
-              {selectedTask && (
-                <TaskStatusHistoryTable
-                  taskId={
-                    selectedTask.is_recurring_instance &&
-                    selectedTask.original_task_id
-                      ? selectedTask.original_task_id
-                      : selectedTask.id
-                  }
-                />
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setStatusUpdateModalOpen(false);
-                setNotes("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                if (!selectedTask) return;
-
-                try {
-                  // Get the current status before updating
-                  const currentStatus = selectedTask.status;
-
-                  // Get the actual task ID (handle recurring instances)
-                  let taskId = selectedTask.id;
-                  if (
-                    selectedTask.is_recurring_instance &&
-                    selectedTask.original_task_id
-                  ) {
-                    taskId = selectedTask.original_task_id;
-                  }
-
-                  // Only update if status has changed
-                  if (currentStatus !== status) {
-                    // Update the task status
-                    const updatedTask = await editTask(taskId, {
-                      status,
-                    });
-
-                    // Add entry to task status history
-                    await addStatusHistory({
-                      task_id: taskId,
-                      status_date: new Date().toISOString(),
-                      status: status,
-                      notes:
-                        notes ||
-                        `Status changed from ${currentStatus} to ${status}`,
-                    });
-
-                    // If status is completed and task is recurring, handle like complete task
-                    if (
-                      status === "completed" &&
-                      (selectedTask.frequency !== "custom" ||
-                        (selectedTask.frequency === "custom" &&
-                          selectedTask.custom_days))
-                    ) {
-                      // Set the task to complete and open the complete dialog
-                      setTaskToComplete(taskId);
-                      setStatusUpdateModalOpen(false);
-                      setCompleteDialogOpen(true);
-                      return;
-                    }
-
-                    toast.success("Task status updated successfully");
-                  } else if (notes) {
-                    // If status hasn't changed but notes were added, just add a history entry
-                    await addStatusHistory({
-                      task_id: taskId,
-                      status_date: new Date().toISOString(),
-                      status: status,
-                      notes: notes,
-                    });
-                    toast.success("Status notes added successfully");
-                  } else {
-                    toast.info("No changes were made");
-                  }
-
-                  setStatusUpdateModalOpen(false);
-                  setNotes("");
-                } catch (error) {
-                  console.error("Error updating task status:", error);
-                  toast.error("Failed to update task status");
-                }
-              }}
-            >
-              Update Status
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -63,9 +63,19 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
           icon: <Wrench className="h-5 w-5" />,
         },
         {
-          name: "Category & Department",
+          name: "Area & Department",
           path: "/categories",
           icon: <Building2 className="h-5 w-5" />,
+        },
+        {
+          name: "Task Management",
+          path: "/tasks",
+          icon: <ClipboardList className="h-5 w-5" />,
+        },
+        {
+          name: "Task-Based Maintenance",
+          path: "/task-maintenance",
+          icon: <Wrench className="h-5 w-5" />,
         },
         {
           name: "Reports & History",

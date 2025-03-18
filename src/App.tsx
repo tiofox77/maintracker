@@ -10,6 +10,8 @@ import UserManagement from "./components/pages/UserManagement";
 import RolePermissions from "./components/pages/RolePermissions";
 import LoginForm from "./components/auth/LoginForm";
 import { useSupabase } from "./components/context/SupabaseProvider";
+import TaskManagement from "./components/pages/TaskManagement";
+import TaskBasedMaintenance from "./components/pages/TaskBasedMaintenance";
 
 // Supply Chain Routes
 import MaterialRequests from "./components/pages/supplyChain/MaterialRequests";
@@ -48,6 +50,11 @@ function App() {
             <Route path="/maintenance" element={<MaintenanceScheduling />} />
             <Route path="/equipment" element={<EquipmentManagement />} />
             <Route path="/categories" element={<CategoryDepartment />} />
+            <Route path="/tasks" element={<TaskManagement />} />
+            <Route
+              path="/task-maintenance"
+              element={<TaskBasedMaintenance />}
+            />
             <Route path="/reports" element={<ReportsHistory />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/users" element={<UserManagement />} />

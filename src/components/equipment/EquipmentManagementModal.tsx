@@ -17,7 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import { useEquipment, useCategories, useDepartments } from "../../lib/hooks";
+import {
+  useEquipment,
+  useCategories,
+  useDepartments,
+  useTasks,
+} from "../../lib/hooks";
 import {
   Equipment,
   EquipmentInsert,
@@ -42,6 +47,11 @@ export const EquipmentManagementModal = ({
   const [serialNumber, setSerialNumber] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [taskId, setTaskId] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [type, setType] = useState<"predictive" | "corrective" | "conditional">(
+    "corrective",
+  );
   const [status, setStatus] = useState<
     "operational" | "maintenance" | "out-of-service"
   >("operational");
@@ -55,6 +65,7 @@ export const EquipmentManagementModal = ({
   const { addEquipment, editEquipment } = useEquipment();
   const { categories, loading: categoriesLoading } = useCategories();
   const { departments, loading: departmentsLoading } = useDepartments();
+  const { tasks, loading: tasksListLoading } = useTasks();
 
   // Fetch equipment data if editing
   useEffect(() => {
@@ -68,6 +79,8 @@ export const EquipmentManagementModal = ({
           setSerialNumber(equipment.serial_number || "");
           setCategoryId(equipment.category_id);
           setDepartmentId(equipment.department_id);
+          setTaskId(equipment.task_id || "");
+          setType(equipment.type || "corrective");
           setStatus(equipment.status);
           setPurchaseDate(equipment.purchase_date || "");
           setLastMaintenance(equipment.last_maintenance || "");
@@ -92,11 +105,24 @@ export const EquipmentManagementModal = ({
     }
   }, [open]);
 
+  // Update task title when tasks are loaded
+  useEffect(() => {
+    if (taskId && tasks.length > 0) {
+      const selectedTask = tasks.find((task) => task.id === taskId);
+      if (selectedTask) {
+        setTaskTitle(selectedTask.name);
+      }
+    }
+  }, [taskId, tasks]);
+
   const resetForm = () => {
     setEquipmentName("");
     setSerialNumber("");
     setCategoryId("");
     setDepartmentId("");
+    setTaskId("");
+    setTaskTitle("");
+    setType("corrective");
     setStatus("operational");
     setPurchaseDate("");
     setLastMaintenance("");
@@ -135,6 +161,8 @@ export const EquipmentManagementModal = ({
           serial_number: serialNumber || null,
           category_id: categoryId,
           department_id: departmentId,
+          task_id: taskId || null,
+          type: type,
           status: status,
           purchase_date: purchaseDate || null,
           last_maintenance: lastMaintenance || null,
@@ -150,6 +178,8 @@ export const EquipmentManagementModal = ({
           serial_number: serialNumber || null,
           category_id: categoryId,
           department_id: departmentId,
+          task_id: taskId || null,
+          type: type,
           status: status,
           purchase_date: purchaseDate || null,
           last_maintenance: lastMaintenance || null,
@@ -183,7 +213,7 @@ export const EquipmentManagementModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        {loading && !categories.length ? (
+        {loading ? (
           <div className="flex justify-center items-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
@@ -265,6 +295,60 @@ export const EquipmentManagementModal = ({
                           No departments available
                         </SelectItem>
                       )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="task">Task</Label>
+                  <Select
+                    value={taskId}
+                    onValueChange={(value) => {
+                      setTaskId(value);
+                      const selectedTask = tasks.find(
+                        (task) => task.id === value,
+                      );
+                      if (selectedTask) {
+                        setTaskTitle(selectedTask.name);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="task">
+                      <SelectValue placeholder="Select task" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tasksListLoading ? (
+                        <SelectItem value="loading" disabled>
+                          Loading tasks...
+                        </SelectItem>
+                      ) : tasks.length > 0 ? (
+                        tasks.map((task) => (
+                          <SelectItem key={task.id} value={task.id}>
+                            {task.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-tasks" disabled>
+                          No tasks available
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Type</Label>
+                  <Select
+                    value={type}
+                    onValueChange={(
+                      value: "predictive" | "corrective" | "conditional",
+                    ) => setType(value)}
+                  >
+                    <SelectTrigger id="type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="predictive">Predictive</SelectItem>
+                      <SelectItem value="corrective">Corrective</SelectItem>
+                      <SelectItem value="conditional">Conditional</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

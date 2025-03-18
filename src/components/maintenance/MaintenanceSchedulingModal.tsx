@@ -20,8 +20,9 @@ import {
 import {
   useMaintenanceTasks,
   useEquipment,
-  useCategories,
-  useDepartments,
+  useLines,
+  useAreas,
+  useTasks,
 } from "../../lib/hooks";
 import {
   MaintenanceTask,
@@ -34,22 +35,26 @@ import { toast } from "../../lib/utils/toast";
 interface MaintenanceSchedulingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  taskId?: string | null;
+  maintenanceTaskId?: string | null;
   mode?: "create" | "edit" | "complete";
 }
 
 export const MaintenanceSchedulingModal = ({
   open,
   onOpenChange,
-  taskId = null,
+  maintenanceTaskId: initialTaskId = null,
   mode = "create",
 }: MaintenanceSchedulingModalProps) => {
   // Form states
+  const [taskId, setTaskId] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [equipmentId, setEquipmentId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
+  const [lineId, setLineId] = useState("");
+  const [type, setType] = useState<"predictive" | "corrective" | "conditional">(
+    "corrective",
+  );
+  const [areaId, setAreaId] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [estimatedDuration, setEstimatedDuration] = useState("");
   const [actualDuration, setActualDuration] = useState("");
@@ -66,16 +71,17 @@ export const MaintenanceSchedulingModal = ({
   // Get data from hooks
   const { addTask, editTask, completeTask } = useMaintenanceTasks();
   const { equipment, loading: equipmentLoading } = useEquipment();
-  const { categories, loading: categoriesLoading } = useCategories();
-  const { departments, loading: departmentsLoading } = useDepartments();
+  const { lines, loading: linesLoading } = useLines();
+  const { areas, loading: areasLoading } = useAreas();
+  const { tasks, loading: tasksListLoading } = useTasks();
 
   // Fetch task data if editing or completing
   useEffect(() => {
     const fetchTaskData = async () => {
-      if (taskId && open) {
+      if (initialTaskId && open) {
         try {
           setLoading(true);
-          const task = await getMaintenanceTaskById(taskId);
+          const task = await getMaintenanceTaskById(initialTaskId);
 
           if (mode === "complete") {
             // Only set minimal data for completion
@@ -85,17 +91,19 @@ export const MaintenanceSchedulingModal = ({
             setActualDuration("");
           } else {
             // Set all data for editing
+            setTaskId(task.task_id || "");
             setTaskTitle(task.title);
             setTaskDescription(task.description || "");
             setEquipmentId(task.equipment_id);
-            setCategoryId(task.category_id || "");
+            setLineId(task.category_id || "");
+            setType(task.type || "corrective");
 
             // Get department ID from equipment
             const equipmentItem = equipment.find(
               (e) => e.id === task.equipment_id,
             );
             if (equipmentItem) {
-              setDepartmentId(equipmentItem.department_id);
+              setAreaId(equipmentItem.department_id);
             }
 
             setScheduledDate(task.scheduled_date || "");
@@ -117,7 +125,7 @@ export const MaintenanceSchedulingModal = ({
     };
 
     fetchTaskData();
-  }, [taskId, open, mode, equipment]);
+  }, [initialTaskId, open, mode, equipment]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -126,12 +134,24 @@ export const MaintenanceSchedulingModal = ({
     }
   }, [open]);
 
+  // Update task title when tasks are loaded
+  useEffect(() => {
+    if (taskId && tasks.length > 0) {
+      const selectedTask = tasks.find((task) => task.id === taskId);
+      if (selectedTask) {
+        setTaskTitle(selectedTask.name);
+        setTaskDescription(selectedTask.description || "");
+      }
+    }
+  }, [taskId, tasks]);
+
   const resetForm = () => {
+    setTaskId("");
     setTaskTitle("");
     setTaskDescription("");
     setEquipmentId("");
-    setCategoryId("");
-    setDepartmentId("");
+    setLineId("");
+    setAreaId("");
     setScheduledDate("");
     setEstimatedDuration("");
     setActualDuration("");
@@ -139,6 +159,7 @@ export const MaintenanceSchedulingModal = ({
     setStatus("scheduled");
     setAssignedTo("");
     setNotes("");
+    setType("corrective");
   };
 
   const validateForm = () => {
@@ -150,8 +171,8 @@ export const MaintenanceSchedulingModal = ({
       return true;
     }
 
-    if (!taskTitle) {
-      toast.error("Task title is required");
+    if (!taskId) {
+      toast.error("Task selection is required");
       return false;
     }
     if (!equipmentId) {
@@ -160,6 +181,10 @@ export const MaintenanceSchedulingModal = ({
     }
     if (!scheduledDate) {
       toast.error("Scheduled date is required");
+      return false;
+    }
+    if (!type) {
+      toast.error("Maintenance type is required");
       return false;
     }
     return true;
@@ -173,17 +198,19 @@ export const MaintenanceSchedulingModal = ({
     try {
       setLoading(true);
 
-      if (mode === "complete" && taskId) {
+      if (mode === "complete" && initialTaskId) {
         // Complete task
-        await completeTask(taskId, parseFloat(actualDuration), notes);
+        await completeTask(initialTaskId, parseFloat(actualDuration), notes);
         toast.success("Task completed successfully");
-      } else if (taskId) {
+      } else if (initialTaskId) {
         // Update existing task
         const taskUpdate: MaintenanceTaskUpdate = {
           title: taskTitle,
           description: taskDescription,
           equipment_id: equipmentId,
-          category_id: categoryId,
+          category_id: lineId,
+          task_id: taskId || null,
+          type: type,
           scheduled_date: scheduledDate,
           estimated_duration: estimatedDuration
             ? parseFloat(estimatedDuration)
@@ -193,7 +220,7 @@ export const MaintenanceSchedulingModal = ({
           assigned_to: assignedTo || null,
           notes: notes,
         };
-        await editTask(taskId, taskUpdate);
+        await editTask(initialTaskId, taskUpdate);
         toast.success("Task updated successfully");
       } else {
         // Create new task
@@ -201,7 +228,9 @@ export const MaintenanceSchedulingModal = ({
           title: taskTitle,
           description: taskDescription,
           equipment_id: equipmentId,
-          category_id: categoryId,
+          category_id: lineId,
+          task_id: taskId || null,
+          type: type,
           scheduled_date: scheduledDate,
           estimated_duration: estimatedDuration
             ? parseFloat(estimatedDuration)
@@ -224,13 +253,13 @@ export const MaintenanceSchedulingModal = ({
     }
   };
 
-  // Handle equipment selection to auto-select its category and department
+  // Handle equipment selection to auto-select its area and department
   const handleEquipmentChange = (value: string) => {
     setEquipmentId(value);
     const selectedEquipment = equipment.find((e) => e.id === value);
     if (selectedEquipment) {
-      setCategoryId(selectedEquipment.category_id);
-      setDepartmentId(selectedEquipment.department_id);
+      setLineId(selectedEquipment.area_id);
+      setAreaId(selectedEquipment.department_id);
     }
   };
 
@@ -301,14 +330,42 @@ export const MaintenanceSchedulingModal = ({
               <div className="grid gap-6 py-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="task-title">Task Title *</Label>
-                    <Input
-                      id="task-title"
-                      placeholder="Enter task title"
-                      value={taskTitle}
-                      onChange={(e) => setTaskTitle(e.target.value)}
+                    <Label htmlFor="task">Task *</Label>
+                    <Select
+                      value={taskId}
+                      onValueChange={(value) => {
+                        setTaskId(value);
+                        const selectedTask = tasks.find(
+                          (task) => task.id === value,
+                        );
+                        if (selectedTask) {
+                          setTaskTitle(selectedTask.name);
+                          setTaskDescription(selectedTask.description || "");
+                        }
+                      }}
                       required
-                    />
+                    >
+                      <SelectTrigger id="task">
+                        <SelectValue placeholder="Select task" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tasksListLoading ? (
+                          <SelectItem value="loading" disabled>
+                            Loading tasks...
+                          </SelectItem>
+                        ) : tasks.length > 0 ? (
+                          tasks.map((task) => (
+                            <SelectItem key={task.id} value={task.id}>
+                              {task.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-tasks" disabled>
+                            No tasks available
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="equipment">Equipment *</Label>
@@ -340,56 +397,50 @@ export const MaintenanceSchedulingModal = ({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Select value={categoryId} onValueChange={setCategoryId}>
-                      <SelectTrigger id="category">
-                        <SelectValue placeholder="Select category" />
+                    <Label htmlFor="line">Line</Label>
+                    <Select value={lineId} onValueChange={setLineId}>
+                      <SelectTrigger id="line">
+                        <SelectValue placeholder="Select line" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categoriesLoading ? (
+                        {linesLoading ? (
                           <SelectItem value="loading" disabled>
-                            Loading categories...
+                            Loading lines...
                           </SelectItem>
-                        ) : categories.length > 0 ? (
-                          categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
+                        ) : lines.length > 0 ? (
+                          lines.map((line) => (
+                            <SelectItem key={line.id} value={line.id}>
+                              {line.name}
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="no-categories" disabled>
-                            No categories available
+                          <SelectItem value="no-lines" disabled>
+                            No lines available
                           </SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="department">Department</Label>
-                    <Select
-                      value={departmentId}
-                      onValueChange={setDepartmentId}
-                    >
-                      <SelectTrigger id="department">
-                        <SelectValue placeholder="Select department" />
+                    <Label htmlFor="area">Area</Label>
+                    <Select value={areaId} onValueChange={setAreaId}>
+                      <SelectTrigger id="area">
+                        <SelectValue placeholder="Select area" />
                       </SelectTrigger>
                       <SelectContent>
-                        {departmentsLoading ? (
+                        {areasLoading ? (
                           <SelectItem value="loading" disabled>
-                            Loading departments...
+                            Loading areas...
                           </SelectItem>
-                        ) : departments.length > 0 ? (
-                          departments.map((department) => (
-                            <SelectItem
-                              key={department.id}
-                              value={department.id}
-                            >
-                              {department.name}
+                        ) : areas.length > 0 ? (
+                          areas.map((area) => (
+                            <SelectItem key={area.id} value={area.id}>
+                              {area.name}
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="no-departments" disabled>
-                            No departments available
+                          <SelectItem value="no-areas" disabled>
+                            No areas available
                           </SelectItem>
                         )}
                       </SelectContent>
@@ -435,6 +486,25 @@ export const MaintenanceSchedulingModal = ({
                         <SelectItem value="medium">Medium</SelectItem>
                         <SelectItem value="high">High</SelectItem>
                         <SelectItem value="critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Type *</Label>
+                    <Select
+                      value={type}
+                      onValueChange={(
+                        value: "predictive" | "corrective" | "conditional",
+                      ) => setType(value)}
+                      required
+                    >
+                      <SelectTrigger id="type">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="predictive">Predictive</SelectItem>
+                        <SelectItem value="corrective">Corrective</SelectItem>
+                        <SelectItem value="conditional">Conditional</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
