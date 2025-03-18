@@ -21,7 +21,7 @@ import { useAreas } from "../../lib/hooks/useAreas";
 import { useLines } from "../../lib/hooks/useLines";
 import { useTasks } from "../../lib/hooks/useTasks";
 import { useUsers } from "../../lib/hooks/useUsers";
-import { getUsersByRole } from "../../lib/api/users";
+import { getUsersByRole, User } from "../../lib/api/users";
 
 interface TaskCorrectiveModalProps {
   isOpen: boolean;
@@ -59,7 +59,7 @@ const TaskCorrectiveModal: React.FC<TaskCorrectiveModalProps> = ({
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [technicians, setTechnicians] = useState<any[]>([]);
+  const [technicians, setTechnicians] = useState<User[]>([]);
   const [technicianLoading, setTechnicianLoading] = useState(true);
   const { equipment, loading: equipmentLoading } = useEquipment();
   const { areas, loading: areasLoading } = useAreas();

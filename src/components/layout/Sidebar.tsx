@@ -37,6 +37,22 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
   const location = useLocation();
   const { signOut } = useSupabase();
 
+  // Keep track of which menu was last expanded
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith("/supply-chain")) {
+      // Only expand Supply Chain and collapse Maintenance
+      setExpandedMenus(["Supply Chain"]);
+    } else if (
+      path.startsWith("/") &&
+      !path.startsWith("/supply-chain") &&
+      !expandedMenus.includes("Maintenance")
+    ) {
+      // Expand Maintenance if we're on a maintenance path and it's not already expanded
+      setExpandedMenus(["Maintenance"]);
+    }
+  }, [location.pathname]);
+
   const handleToggle = () => {
     setIsCollapsed(!isCollapsed);
     onToggle();
@@ -200,10 +216,9 @@ const Sidebar = ({ collapsed = false, onToggle = () => {} }: SidebarProps) => {
                         )}
                         onClick={() => {
                           if (hasSubmenu) {
+                            // When clicking on a main menu, toggle it exclusively
                             setExpandedMenus((prev) =>
-                              prev.includes(item.name)
-                                ? prev.filter((name) => name !== item.name)
-                                : [...prev, item.name],
+                              prev.includes(item.name) ? [] : [item.name],
                             );
                           }
                         }}

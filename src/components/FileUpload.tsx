@@ -11,6 +11,8 @@ interface FileUploadProps {
   maxSize?: number; // in MB
   folder?: string;
   buttonText?: string;
+  relatedTo?: string; // e.g., 'proforma_invoice'
+  relatedId?: string; // The ID of the related record
 }
 
 const FileUpload: React.FC<FileUploadProps> = ({
@@ -19,6 +21,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
   maxSize = 10, // Default 10MB
   folder = "uploads",
   buttonText = "Upload File",
+  relatedTo,
+  relatedId,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -90,6 +94,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
         .from("documents")
         .getPublicUrl(filePath);
 
+      const publicUrl = urlData.publicUrl;
+
       // Save file metadata to document_files table
       const { error: dbError } = await supabase.from("document_files").insert({
         file_name: fileName,
@@ -97,8 +103,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
         content_type: selectedFile.type,
         file_size: selectedFile.size,
         file_path: filePath,
-        document_url: urlData.publicUrl,
+        document_url: publicUrl,
         uploaded_by: (await supabase.auth.getUser()).data.user?.id || null,
+        related_to: relatedTo || null,
+        related_id: relatedId || null,
       });
 
       if (dbError) {
@@ -106,8 +114,28 @@ const FileUpload: React.FC<FileUploadProps> = ({
         // Continue even if DB save fails, but log the error
       }
 
+      // If this is for a proforma invoice, update the document_url in the proforma_invoices table
+      if (relatedTo === "proforma_invoice" && relatedId) {
+        const { error: updateError } = await supabase
+          .from("proforma_invoices")
+          .update({ document_url: publicUrl })
+          .eq("id", relatedId);
+
+        if (updateError) {
+          console.error(
+            "Error updating proforma invoice with document URL:",
+            updateError,
+          );
+          // Continue even if update fails, but log the error
+        } else {
+          console.log(
+            `Successfully updated proforma invoice ${relatedId} with document URL: ${publicUrl}`,
+          );
+        }
+      }
+
       // Pass the URL back to the parent component
-      onFileUpload(urlData.publicUrl);
+      onFileUpload(publicUrl);
 
       // Reset the file input
       setSelectedFile(null);

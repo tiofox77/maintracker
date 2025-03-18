@@ -130,7 +130,6 @@ export async function getProformaInvoiceById(id: string) {
 // Create a new proforma invoice
 export async function createProformaInvoice(
   proformaInvoice: ProformaInvoiceInsert,
-  documentFile?: File,
 ) {
   try {
     // Generate a unique PI ID (e.g., PI-2023-0001)
@@ -160,97 +159,8 @@ export async function createProformaInvoice(
       throw error;
     }
 
-    // If a document file was provided, upload it to storage
-    if (documentFile) {
-      try {
-        console.log("Processing document file:", documentFile.name);
-
-        // Create a unique filename to prevent collisions
-        const timestamp = new Date().getTime();
-        const safeFileName = documentFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-        const uniqueFileName = `${timestamp}_${safeFileName}`;
-        const filePath = `proforma_invoices/${uniqueFileName}`;
-
-        // First, ensure the bucket exists
-        const { data: bucketData, error: bucketError } =
-          await supabase.storage.getBucket("documents");
-
-        if (bucketError && bucketError.message.includes("not found")) {
-          // Create the bucket if it doesn't exist
-          const { error: createBucketError } =
-            await supabase.storage.createBucket("documents", {
-              public: true,
-            });
-
-          if (createBucketError) {
-            throw createBucketError;
-          }
-        } else if (bucketError) {
-          throw bucketError;
-        }
-
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(filePath, documentFile, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        // Get the public URL
-        const { data: urlData } = supabase.storage
-          .from("documents")
-          .getPublicUrl(filePath);
-
-        // Store file metadata in document_files table
-        const { data: fileData, error: dbError } = await supabase
-          .from("document_files")
-          .insert({
-            file_name: uniqueFileName,
-            original_name: documentFile.name,
-            content_type: documentFile.type,
-            file_size: documentFile.size,
-            file_path: filePath,
-            document_url: urlData.publicUrl,
-            related_to: "proforma_invoice",
-            related_id: data.id,
-            uploaded_by: userId,
-          })
-          .select("id")
-          .single();
-
-        if (dbError) {
-          console.error("Error storing file data:", dbError);
-          throw dbError;
-        }
-
-        console.log("File data stored successfully:", fileData);
-
-        // Update the proforma invoice with the document reference
-        const { error: updateError } = await supabase
-          .from("proforma_invoices")
-          .update({ document_url: urlData.publicUrl })
-          .eq("id", data.id);
-
-        if (updateError) {
-          console.error(
-            "Error updating invoice with document URL:",
-            updateError,
-          );
-          throw updateError;
-        }
-
-        // Update the local data object with the document URL
-        data.document_url = urlData.publicUrl;
-      } catch (uploadError) {
-        console.error("Error uploading document:", uploadError);
-        // Continue with the function even if upload fails
-      }
-    }
+    // Document URL is now directly provided in the proformaInvoice object
+    // No need to upload files here as it's handled by the FileUpload component
 
     return data as ProformaInvoice;
   } catch (error) {
@@ -263,7 +173,6 @@ export async function createProformaInvoice(
 export async function updateProformaInvoice(
   id: string,
   proformaInvoice: ProformaInvoiceUpdate,
-  documentFile?: File,
 ) {
   try {
     const { data: user } = await supabase.auth.getUser();
@@ -280,101 +189,12 @@ export async function updateProformaInvoice(
       throw fetchError;
     }
 
-    // If a document file was provided, upload it to storage
-    if (documentFile) {
-      try {
-        console.log("Processing updated document file:", documentFile.name);
+    // Document URL is now directly provided in the proformaInvoice object
+    // No need to upload files here as it's handled by the FileUpload component
 
-        // Create a unique filename to prevent collisions
-        const timestamp = new Date().getTime();
-        const safeFileName = documentFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-        const uniqueFileName = `${timestamp}_${safeFileName}`;
-        const filePath = `proforma_invoices/${uniqueFileName}`;
-
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(filePath, documentFile, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        // Get the public URL
-        const { data: urlData } = supabase.storage
-          .from("documents")
-          .getPublicUrl(filePath);
-
-        // Store file metadata in document_files table
-        const { data: fileData, error: dbError } = await supabase
-          .from("document_files")
-          .insert({
-            file_name: uniqueFileName,
-            original_name: documentFile.name,
-            content_type: documentFile.type,
-            file_size: documentFile.size,
-            file_path: filePath,
-            document_url: urlData.publicUrl,
-            related_to: "proforma_invoice",
-            related_id: id,
-            uploaded_by: userId,
-          })
-          .select("id")
-          .single();
-
-        if (dbError) {
-          console.error("Error storing updated file data:", dbError);
-          throw dbError;
-        }
-
-        console.log("Updated file data stored successfully:", fileData);
-
-        // Add the document URL to the update object
-        proformaInvoice.document_url = urlData.publicUrl;
-
-        // If there was a previous document, try to delete it from storage
-        if (currentInvoice?.document_url) {
-          try {
-            console.log(
-              "Attempting to delete old file reference:",
-              currentInvoice.document_url,
-            );
-
-            // Extract the file path from the URL
-            const pathMatch = currentInvoice.document_url.match(
-              /\/storage\/v1\/object\/public\/documents\/([^?]+)/,
-            );
-            if (pathMatch && pathMatch[1]) {
-              const oldFilePath = decodeURIComponent(pathMatch[1]);
-
-              // Delete the file from storage
-              const { error: removeError } = await supabase.storage
-                .from("documents")
-                .remove([oldFilePath]);
-
-              if (removeError) {
-                console.error("Error removing old file:", removeError);
-              } else {
-                console.log("Old file deleted successfully");
-              }
-            } else {
-              console.log(
-                "Could not extract file path from URL, skipping deletion",
-              );
-            }
-          } catch (deleteError) {
-            console.error("Error deleting old document:", deleteError);
-            // Continue even if deletion fails
-          }
-        }
-      } catch (uploadError) {
-        console.error("Error uploading document:", uploadError);
-        // Continue with the update even if upload fails
-      }
-    }
+    // If there's a new document URL and it's different from the current one,
+    // we might want to delete the old file, but we'll skip that for now
+    // as the FileUpload component handles the upload part
 
     // Update the proforma invoice
     const { data, error } = await supabase
